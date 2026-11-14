@@ -11,7 +11,7 @@ Every run records this fingerprint in its `diagnostics.json`; the model digest i
 | Field | Value |
 | --- | --- |
 | Model | `qwen3.5:9b` (Ollama) |
-| Model digest | recorded per run in `diagnostics.json` (fill in after the first baseline run) |
+| Model digest | `56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90` |
 | Temperature | 0.8 |
 | Reasoning (think) | off (`--no-think`) |
 | Max opportunities | 18 |

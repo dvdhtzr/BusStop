@@ -134,7 +134,7 @@ var batch = new StringBuilder();
 batch.AppendLine($"# BusStop batch — {runs} run(s)");
 batch.AppendLine();
 batch.AppendLine($"**Model:** {(ollamaAdapter is null ? modelConfigVersion : ollamaAdapter.ModelName)}  ");
-batch.AppendLine($"**Protocol:** floor-1 · ctx-3-ending  ");
+batch.AppendLine($"**Protocol:** {Laboratory.ProtocolVersion} · {Laboratory.ContextVersion}  ");
 batch.AppendLine($"**Generated:** {DateTime.Now:yyyy-MM-dd HH:mm}");
 batch.AppendLine();
 batch.AppendLine("## Summary");

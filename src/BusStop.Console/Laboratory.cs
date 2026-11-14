@@ -35,6 +35,9 @@ public static class Laboratory
 
     public static IReadOnlyList<CharacterProfile> Cast => new[] { Arthur, Maya, Daniel };
 
+    public const string ProtocolVersion = "floor-2";
+    public const string ContextVersion = "ctx-3-ending";
+
     public static readonly Briefing Story = new(
         new BriefingId(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")),
         "Shuttered auto-parts plant to reopen under new owner",
@@ -58,9 +61,9 @@ public static class Laboratory
             Cast.Select(c => c.Id).ToList(),
             mode,
             Story.Id,
-            ProtocolVersion: "floor-2",
+            ProtocolVersion: ProtocolVersion,
             ModelConfigVersion: modelConfigVersion,
-            ContextVersion: "ctx-3-ending",
+            ContextVersion: ContextVersion,
             Status: SessionStatus.Active,
             CreatedAt: DateTimeOffset.UtcNow,
             EndedAt: null));
