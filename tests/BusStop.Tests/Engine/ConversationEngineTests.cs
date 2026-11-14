@@ -1,4 +1,5 @@
 using BusStop.Context;
+using BusStop.Coordinator;
 using BusStop.Domain;
 using BusStop.Engine;
 using BusStop.Models;
@@ -170,6 +171,66 @@ public sealed class ConversationEngineTests : IDisposable
             Assert.Equal(baseline, resumed.Select(u => u.Text));
             Assert.Equal(new long[] { 1, 2, 3 }, resumed.Select(u => u.Sequence));
         }
+    }
+
+    private SessionId SeedSolo(ConversationStore store, CharacterProfile solo)
+    {
+        store.SaveCharacter(solo);
+        store.SaveBriefing(Story);
+        var id = SessionId.New();
+        store.CreateSession(new Session(
+            id, new[] { solo.Id }, SessionMode.FreshEncounter, Story.Id,
+            "proto-1", "stub/stub-digest", "ctx-1", SessionStatus.Active, DateTimeOffset.UtcNow, null));
+        return id;
+    }
+
+    [Fact]
+    public void Self_echo_is_suppressed_and_treated_as_silence()
+    {
+        var solo = new CharacterProfile(CharacterId.New(), 1, "Solo", "A person.", new[] { "terse" });
+        using var store = OpenStore();
+        var session = SeedSolo(store, solo);
+
+        var script = new[]
+        {
+            StubResponses.Speak("The plant mattered to this whole town."),
+            StubResponses.Speak("The plant mattered to this whole town.") // echo of own line
+        };
+        var result = new ConversationEngine(
+            store, new StubModelClient(script), new ParticipantContextBuilder(), session,
+            new[] { solo }, Story,
+            new EngineOptions(
+                MaxAttemptsPerOpportunity: 1,
+                SuppressSelfEcho: true,
+                Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: 1))).Run();
+
+        // Only the first line committed; the echo was suppressed, not delivered.
+        Assert.Single(store.GetCommittedUtterances(session));
+
+        // The echo was recorded honestly as its own outcome, and treated as silence (natural end).
+        Assert.Contains(store.GetAttempts(session), a => a.Outcome == AttemptOutcome.EchoedSelf);
+        Assert.Equal(TerminationReason.NaturalEnd, result.Reason);
+    }
+
+    [Fact]
+    public void Without_suppression_a_repeat_is_committed()
+    {
+        var solo = new CharacterProfile(CharacterId.New(), 1, "Solo", "A person.", new[] { "terse" });
+        using var store = OpenStore();
+        var session = SeedSolo(store, solo);
+
+        var script = new[]
+        {
+            StubResponses.Speak("The plant mattered to this whole town."),
+            StubResponses.Speak("The plant mattered to this whole town.")
+        };
+        new ConversationEngine(
+            store, new StubModelClient(script), new ParticipantContextBuilder(), session,
+            new[] { solo }, Story,
+            new EngineOptions(MaxOpportunities: 2, SuppressSelfEcho: false)).Run();
+
+        // With suppression off (the baseline), the repeat is committed as a second utterance.
+        Assert.Equal(2, store.GetCommittedUtterances(session).Count);
     }
 
     public void Dispose()

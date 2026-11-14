@@ -14,6 +14,7 @@ public static class OutcomeClassification
         AttemptOutcome.Timeout => OutcomeCategory.Failed,
         AttemptOutcome.TransportError => OutcomeCategory.Failed,
         AttemptOutcome.Cancelled => OutcomeCategory.Failed,
+        AttemptOutcome.EchoedSelf => OutcomeCategory.Suppressed,
         _ => throw new ArgumentOutOfRangeException(
             nameof(outcome), outcome, "Unclassified AttemptOutcome; every outcome must be categorized explicitly.")
     };

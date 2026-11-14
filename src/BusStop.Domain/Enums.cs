@@ -52,7 +52,11 @@ public enum AttemptOutcome
     EmptySpeak,
     Timeout,
     TransportError,
-    Cancelled
+    Cancelled,
+
+    /// <summary>Well-formed speech that merely repeats the speaker's own recent line. It is suppressed
+    /// rather than delivered. Not a failure of the model call and not a voluntary silence; its own class.</summary>
+    EchoedSelf
 }
 
 /// <summary>Coarse category an <see cref="AttemptOutcome"/> falls into.</summary>
@@ -60,5 +64,9 @@ public enum OutcomeCategory
 {
     Spoke,
     Silent,
-    Failed
+    Failed,
+
+    /// <summary>Valid output that was deliberately withheld (e.g. a self-echo), distinct from a technical
+    /// failure and from a voluntary silence.</summary>
+    Suppressed
 }

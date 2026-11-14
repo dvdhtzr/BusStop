@@ -11,7 +11,9 @@ public sealed record EngineOptions(
     int MaxModelCalls = 120,
     int MaxAttemptsPerOpportunity = 2,
     int ProtocolVersion = 1,
-    CoordinatorOptions? Coordinator = null);
+    CoordinatorOptions? Coordinator = null,
+    bool SuppressSelfEcho = false,
+    double EchoThreshold = 0.8);
 
 /// <summary>Why a run stopped. A natural end and a reached budget are distinct, so hitting a ceiling
 /// is never reported as the conversation concluding on its own.</summary>
@@ -143,6 +145,14 @@ public sealed class ConversationEngine
             offer.Participant,
             built.VisibleUtteranceIds);
 
+        // The speaker's own recent lines, for the optional self-echo check.
+        var recentOwn = history
+            .Where(u => u.Speaker == offer.Participant)
+            .OrderByDescending(u => u.Sequence)
+            .Take(3)
+            .Select(u => u.Text)
+            .ToList();
+
         // Bounded inference. Each attempt is recorded with its own outcome and retry lineage.
         ValidatedDecision decision = new(AttemptOutcome.TransportError, null, null, null, null);
         AttemptId? previous = null;
@@ -154,6 +164,15 @@ public sealed class ConversationEngine
             _modelCalls++;
             decision = DecisionValidator.Validate(response, validationContext);
 
+            // Suppress a valid speak that merely repeats the speaker's own recent line, so the retry
+            // can try for something new. Recorded as its own outcome, never delivered.
+            if (_options.SuppressSelfEcho
+                && decision.Outcome == AttemptOutcome.ValidSpeak
+                && EchoDetector.IsEcho(decision.Text!, recentOwn, _options.EchoThreshold))
+            {
+                decision = new ValidatedDecision(AttemptOutcome.EchoedSelf, null, null, null, null);
+            }
+
             var attempt = new ModelAttempt(
                 AttemptId.New(), opportunityId, offer.Participant,
                 _model.ModelName, _model.ModelDigest, _options.ProtocolVersion,
@@ -162,10 +181,12 @@ public sealed class ConversationEngine
             previous = attempt.Id;
             lastAttempt = attempt.Id;
 
-            if (!OutcomeClassification.IsFailure(decision.Outcome))
+            // Terminal outcomes for this opportunity are a valid speak or a voluntary pass; everything
+            // else (failures and suppressed echoes) is retried within the attempt budget.
+            if (decision.Outcome is AttemptOutcome.ValidSpeak or AttemptOutcome.ValidPass)
                 break;
 
-            _trace?.Invoke($"    attempt {i + 1} failed ({decision.Outcome}); raw: {Snippet(response.RawJson)}");
+            _trace?.Invoke($"    attempt {i + 1} not usable ({decision.Outcome}); raw: {Snippet(response.RawJson)}");
         }
 
         switch (decision.Outcome)
@@ -187,6 +208,15 @@ public sealed class ConversationEngine
                     opportunityId, offer.Participant, DecisionAction.Pass, null, null, lastAttempt));
                 _coordinator.RecordPassed(offer.Participant);
                 _trace?.Invoke($"  {self.Name} stays quiet.");
+                break;
+
+            case AttemptOutcome.EchoedSelf:
+                // The speaker only repeated their own recent line. Treat the opportunity as silence so
+                // the conversation can wind down, while recording the attempt honestly as EchoedSelf.
+                _store.SaveDecision(new ParticipantDecision(
+                    opportunityId, offer.Participant, DecisionAction.Pass, null, null, lastAttempt));
+                _coordinator.RecordPassed(offer.Participant);
+                _trace?.Invoke($"  {self.Name} stays quiet (nothing new to add).");
                 break;
 
             default:

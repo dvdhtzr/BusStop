@@ -82,7 +82,9 @@ public static class TranscriptRenderer
                 maxOpportunities = runConfig?.MaxOpportunities,
                 maxModelCalls = runConfig?.MaxModelCalls,
                 maxAttemptsPerOpportunity = runConfig?.MaxAttemptsPerOpportunity,
-                endAfterConsecutivePasses = runConfig?.EndAfterConsecutivePasses
+                endAfterConsecutivePasses = runConfig?.EndAfterConsecutivePasses,
+                suppressSelfEcho = runConfig?.SuppressSelfEcho,
+                echoThreshold = runConfig?.EchoThreshold
             }
         };
 
@@ -99,4 +101,6 @@ public sealed record RunConfig(
     int MaxAttemptsPerOpportunity,
     int? EndAfterConsecutivePasses,
     double Temperature,
-    bool? Think);
+    bool? Think,
+    bool SuppressSelfEcho,
+    double EchoThreshold);

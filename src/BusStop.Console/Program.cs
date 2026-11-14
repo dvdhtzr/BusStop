@@ -69,7 +69,9 @@ var engineOptions = modelKind == "ollama"
         MaxOpportunities: 18,
         MaxModelCalls: 36,
         MaxAttemptsPerOpportunity: 2,
-        Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: 2))
+        Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: 2),
+        SuppressSelfEcho: true,
+        EchoThreshold: 0.8)
     : new EngineOptions();
 
 var runConfig = new RunConfig(
@@ -78,7 +80,9 @@ var runConfig = new RunConfig(
     engineOptions.MaxAttemptsPerOpportunity,
     engineOptions.Coordinator?.EndAfterConsecutivePasses,
     Temperature,
-    thinkSetting);
+    thinkSetting,
+    engineOptions.SuppressSelfEcho,
+    engineOptions.EchoThreshold);
 
 Action<string>? trace = modelKind == "ollama"
     ? line => System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}")

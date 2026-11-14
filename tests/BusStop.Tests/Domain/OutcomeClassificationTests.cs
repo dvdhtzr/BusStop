@@ -37,6 +37,15 @@ public class OutcomeClassificationTests
     }
 
     [Fact]
+    public void EchoedSelf_is_suppressed_and_neither_speech_silence_nor_failure()
+    {
+        Assert.Equal(OutcomeCategory.Suppressed, OutcomeClassification.Classify(AttemptOutcome.EchoedSelf));
+        Assert.False(OutcomeClassification.ProducesUtterance(AttemptOutcome.EchoedSelf));
+        Assert.False(OutcomeClassification.IsVoluntarySilence(AttemptOutcome.EchoedSelf));
+        Assert.False(OutcomeClassification.IsFailure(AttemptOutcome.EchoedSelf));
+    }
+
+    [Fact]
     public void Only_valid_speak_produces_an_utterance()
     {
         Assert.True(OutcomeClassification.ProducesUtterance(AttemptOutcome.ValidSpeak));
