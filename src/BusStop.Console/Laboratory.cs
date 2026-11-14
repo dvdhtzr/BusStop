@@ -56,7 +56,7 @@ public static class Laboratory
             Story.Id,
             ProtocolVersion: "floor-1",
             ModelConfigVersion: modelConfigVersion,
-            ContextVersion: "ctx-1",
+            ContextVersion: "ctx-2-brevity",
             Status: SessionStatus.Active,
             CreatedAt: DateTimeOffset.UtcNow,
             EndedAt: null));
