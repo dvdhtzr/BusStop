@@ -55,10 +55,13 @@ public sealed record ParticipantDecision(
     AttemptId Attempt);
 
 /// <summary>A committed utterance: the authoritative record of something a participant said.
-/// <see cref="Sequence"/> is strictly increasing and unique within a session.</summary>
+/// <see cref="Sequence"/> is strictly increasing and unique within a session. <see cref="Opportunity"/>
+/// is the offer that produced it; at most one committed utterance exists per opportunity, which is
+/// what makes recovery exactly-once.</summary>
 public sealed record Utterance(
     UtteranceId Id,
     SessionId Session,
+    OpportunityId Opportunity,
     CharacterId Speaker,
     long Sequence,
     string Text,
