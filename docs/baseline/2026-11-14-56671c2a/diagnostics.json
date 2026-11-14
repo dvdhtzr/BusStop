@@ -1,0 +1,31 @@
+{
+  "session": "f37e3f93-0c60-420e-a4f5-dc4abe802588",
+  "termination": "NaturalEnd",
+  "opportunities": 15,
+  "modelCalls": 15,
+  "committedUtterances": 11,
+  "sequenceContiguous": true,
+  "outcomes": {
+    "ValidSpeak": 11,
+    "ValidPass": 4
+  },
+  "config": {
+    "model": "qwen3.5:9b",
+    "digest": "56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90",
+    "mode": "FreshEncounter",
+    "protocolVersion": "floor-2",
+    "contextVersion": "ctx-3-ending",
+    "characters": [
+      "Arthur v1",
+      "Maya v2",
+      "Daniel v2"
+    ],
+    "briefingId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "temperature": 0.8,
+    "think": false,
+    "maxOpportunities": 18,
+    "maxModelCalls": 36,
+    "maxAttemptsPerOpportunity": 2,
+    "endAfterConsecutivePasses": 2
+  }
+}

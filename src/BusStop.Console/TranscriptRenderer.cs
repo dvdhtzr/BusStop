@@ -44,7 +44,9 @@ public static class TranscriptRenderer
         return sb.ToString();
     }
 
-    public static string RenderDiagnostics(ConversationStore store, SessionId session, RunResult result, string modelName, string modelDigest)
+    public static string RenderDiagnostics(
+        ConversationStore store, SessionId session, RunResult result,
+        string modelName, string modelDigest, RunConfig? runConfig = null)
     {
         var sessionRecord = store.GetSession(session);
         var committed = store.GetCommittedUtterances(session);
@@ -72,10 +74,29 @@ public static class TranscriptRenderer
                 digest = modelDigest,
                 mode = sessionRecord?.Mode.ToString(),
                 protocolVersion = sessionRecord?.ProtocolVersion,
-                contextVersion = sessionRecord?.ContextVersion
+                contextVersion = sessionRecord?.ContextVersion,
+                characters = Laboratory.Cast.Select(c => $"{c.Name} v{c.Version}").ToArray(),
+                briefingId = Laboratory.Story.Id.ToString(),
+                temperature = runConfig?.Temperature,
+                think = runConfig?.Think,
+                maxOpportunities = runConfig?.MaxOpportunities,
+                maxModelCalls = runConfig?.MaxModelCalls,
+                maxAttemptsPerOpportunity = runConfig?.MaxAttemptsPerOpportunity,
+                endAfterConsecutivePasses = runConfig?.EndAfterConsecutivePasses
             }
         };
 
         return JsonSerializer.Serialize(model, new JsonSerializerOptions { WriteIndented = true });
     }
 }
+
+/// <summary>The full numeric run configuration, recorded in diagnostics so every run self-documents its
+/// complete fingerprint — closing the gap where version labels alone did not capture budgets, the ending
+/// threshold, temperature, or whether reasoning was on.</summary>
+public sealed record RunConfig(
+    int MaxOpportunities,
+    int MaxModelCalls,
+    int MaxAttemptsPerOpportunity,
+    int? EndAfterConsecutivePasses,
+    double Temperature,
+    bool? Think);
