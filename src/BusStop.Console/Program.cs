@@ -1,18 +1,17 @@
-﻿using BusStop.Console;
+﻿using System.Text;
+using BusStop.Console;
 using BusStop.Domain;
 using BusStop.Engine;
 using BusStop.Models;
 using BusStop.Persistence;
 
 // Minimal laboratory runner for Phase 1. Writes a Markdown transcript and a JSON diagnostics sidecar,
-// and prints the transcript.
+// and prints the transcript. With --runs N it runs N independent conversations and writes one combined
+// batch.md with a summary table — the file to send for review.
 //
 // Usage:
 //   dotnet run --project src/BusStop.Console -- [--model stub|ollama] [--ollama-model <name>]
-//                                              [--ollama-url <url>] [--db <path>] [--out <dir>]
-//
-// The stub model (default) runs a deterministic demo with no external dependency. The ollama model runs
-// a real conversation against a local Ollama server.
+//       [--ollama-url <url>] [--no-think] [--ollama-timeout <seconds>] [--runs <n>] [--db <path>] [--out <dir>]
 
 var argv = Environment.GetCommandLineArgs().Skip(1).ToArray();
 string? Arg(string name)
@@ -22,17 +21,19 @@ string? Arg(string name)
 }
 
 var modelKind = Arg("--model") ?? "stub";
+var runs = int.TryParse(Arg("--runs"), out var r) && r > 0 ? r : 1;
 var outDir = Arg("--out") ?? Directory.GetCurrentDirectory();
 Directory.CreateDirectory(outDir);
 var dbPath = Arg("--db") ?? Path.Combine(outDir, $"busstop-lab-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
 
-IModelClient client;
+Func<IModelClient> makeClient;
+OllamaAdapter? ollamaAdapter = null;
 string modelConfigVersion;
 
 switch (modelKind)
 {
     case "stub":
-        client = Laboratory.DemoModel();
+        makeClient = () => Laboratory.DemoModel();
         modelConfigVersion = "stub/stub-digest";
         break;
 
@@ -47,12 +48,11 @@ switch (modelKind)
                 "Start Ollama and ensure the model is pulled, then retry.");
             return 2;
         }
-        System.Console.WriteLine($"Using Ollama model '{ollamaModel}'. The first turn loads the model and can take a while; progress appears per turn below.");
-        System.Console.WriteLine();
         bool? think = argv.Contains("--no-think") ? false : null;
-        var adapter = new OllamaAdapter(ollamaModel, ollamaUrl, timeout: TimeSpan.FromSeconds(timeoutSeconds), think: think);
-        client = adapter;
-        modelConfigVersion = $"{adapter.ModelName}/{adapter.ModelDigest}";
+        ollamaAdapter = new OllamaAdapter(ollamaModel, ollamaUrl, timeout: TimeSpan.FromSeconds(timeoutSeconds), think: think);
+        makeClient = () => ollamaAdapter;
+        modelConfigVersion = $"{ollamaAdapter.ModelName}/{ollamaAdapter.ModelDigest}";
+        System.Console.WriteLine($"Using Ollama model '{ollamaModel}'{(think == false ? " (thinking off)" : "")}. {runs} run(s). The first turn loads the model and can take a while.");
         break;
 
     default:
@@ -60,11 +60,7 @@ switch (modelKind)
         return 2;
 }
 
-using var store = ConversationStore.OpenFile(dbPath);
-store.InitializeSchema();
-var session = Laboratory.Seed(store, SessionMode.FreshEncounter, modelConfigVersion);
-
-var options = modelKind == "ollama"
+var engineOptions = modelKind == "ollama"
     ? new EngineOptions(MaxOpportunities: 24, MaxModelCalls: 48, MaxAttemptsPerOpportunity: 2)
     : new EngineOptions();
 
@@ -72,34 +68,73 @@ Action<string>? trace = modelKind == "ollama"
     ? line => System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}")
     : null;
 
-var result = new ConversationEngine(
-    store, client, new BusStop.Context.ParticipantContextBuilder(), session,
-    Laboratory.Cast, Laboratory.Story, options, trace: trace).Run();
+using var store = ConversationStore.OpenFile(dbPath);
+store.InitializeSchema();
 
-var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
-var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest);
+var runSections = new StringBuilder();
+var summary = new StringBuilder();
+summary.AppendLine("| Run | Termination | Opportunities | Utterances |");
+summary.AppendLine("| --- | --- | --- | --- |");
 
-var transcriptPath = Path.Combine(outDir, "transcript.md");
-var diagnosticsPath = Path.Combine(outDir, "diagnostics.json");
-File.WriteAllText(transcriptPath, transcript);
-File.WriteAllText(diagnosticsPath, diagnostics);
+string lastTranscript = string.Empty;
+string lastDiagnostics = string.Empty;
 
-(client as IDisposable)?.Dispose();
-
-var committedCount = store.GetCommittedUtterances(session).Count;
-
-System.Console.WriteLine();
-System.Console.WriteLine("==== final transcript ====");
-System.Console.WriteLine(transcript);
-System.Console.WriteLine("---");
-System.Console.WriteLine($"Model: {client.ModelName}  Termination: {result.Reason}  Opportunities: {result.Opportunities}  Model calls: {result.ModelCalls}");
-if (modelKind == "ollama" && committedCount == 0)
+for (var i = 1; i <= runs; i++)
 {
-    System.Console.Error.WriteLine(
-        "WARNING: no one spoke — every model call failed. Check that Ollama is running and that " +
-        $"--ollama-model ('{Arg("--ollama-model") ?? "llama3.2"}') exactly matches a name from `ollama list`.");
+    if (runs > 1) System.Console.WriteLine($"\n==== Run {i} of {runs} ====");
+
+    var client = makeClient();
+    var session = Laboratory.Seed(store, SessionMode.FreshEncounter, modelConfigVersion);
+    var result = new ConversationEngine(
+        store, client, new BusStop.Context.ParticipantContextBuilder(), session,
+        Laboratory.Cast, Laboratory.Story, engineOptions, trace: trace).Run();
+
+    var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
+    var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest);
+    var committed = store.GetCommittedUtterances(session).Count;
+
+    lastTranscript = transcript;
+    lastDiagnostics = diagnostics;
+
+    summary.AppendLine($"| {i} | {result.Reason} | {result.Opportunities} | {committed} |");
+    runSections.AppendLine($"## Run {i}");
+    runSections.AppendLine();
+    runSections.AppendLine($"_{result.Reason}, {result.Opportunities} opportunities, {committed} utterances._");
+    runSections.AppendLine();
+    runSections.AppendLine(transcript);
+    runSections.AppendLine();
+    runSections.AppendLine("---");
+    runSections.AppendLine();
 }
-System.Console.WriteLine($"Transcript:  {transcriptPath}");
-System.Console.WriteLine($"Diagnostics: {diagnosticsPath}");
-System.Console.WriteLine($"Database:    {dbPath}");
+
+ollamaAdapter?.Dispose();
+
+// Single run: keep transcript.md / diagnostics.json for the usual single-run flow.
+File.WriteAllText(Path.Combine(outDir, "transcript.md"), lastTranscript);
+File.WriteAllText(Path.Combine(outDir, "diagnostics.json"), lastDiagnostics);
+
+// The combined batch file — the one to send for review.
+var batch = new StringBuilder();
+batch.AppendLine($"# BusStop batch — {runs} run(s)");
+batch.AppendLine();
+batch.AppendLine($"**Model:** {(ollamaAdapter is null ? modelConfigVersion : ollamaAdapter.ModelName)}  ");
+batch.AppendLine($"**Protocol:** floor-1 · ctx-3-ending  ");
+batch.AppendLine($"**Generated:** {DateTime.Now:yyyy-MM-dd HH:mm}");
+batch.AppendLine();
+batch.AppendLine("## Summary");
+batch.AppendLine();
+batch.Append(summary);
+batch.AppendLine();
+batch.AppendLine("---");
+batch.AppendLine();
+batch.Append(runSections);
+var batchPath = Path.Combine(outDir, "batch.md");
+File.WriteAllText(batchPath, batch.ToString());
+
+if (runs == 1) System.Console.WriteLine(lastTranscript);
+System.Console.WriteLine("\n---");
+System.Console.WriteLine($"Completed {runs} run(s).");
+System.Console.WriteLine(summary.ToString());
+System.Console.WriteLine($"Combined report: {batchPath}");
+System.Console.WriteLine($"Database:        {dbPath}");
 return 0;
