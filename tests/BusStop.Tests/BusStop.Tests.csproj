@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\src\BusStop.Context\BusStop.Context.csproj" />
     <ProjectReference Include="..\..\src\BusStop.Coordinator\BusStop.Coordinator.csproj" />
     <ProjectReference Include="..\..\src\BusStop.Engine\BusStop.Engine.csproj" />
+    <ProjectReference Include="..\..\src\BusStop.Console\BusStop.Console.csproj" />
   </ItemGroup>
 
 </Project>
