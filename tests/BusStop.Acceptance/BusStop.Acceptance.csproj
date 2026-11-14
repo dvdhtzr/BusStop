@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BusStop.Engine\BusStop.Engine.csproj" />
     <ProjectReference Include="..\..\src\BusStop.Models\BusStop.Models.csproj" />
+    <ProjectReference Include="..\..\src\BusStop.Console\BusStop.Console.csproj" />
   </ItemGroup>
 
 </Project>
