@@ -58,7 +58,7 @@ public static class Laboratory
             Cast.Select(c => c.Id).ToList(),
             mode,
             Story.Id,
-            ProtocolVersion: "floor-1",
+            ProtocolVersion: "floor-2",
             ModelConfigVersion: modelConfigVersion,
             ContextVersion: "ctx-3-ending",
             Status: SessionStatus.Active,

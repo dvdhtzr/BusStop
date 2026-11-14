@@ -27,6 +27,9 @@ var outDir = Arg("--out") ?? Directory.GetCurrentDirectory();
 Directory.CreateDirectory(outDir);
 var dbPath = Arg("--db") ?? Path.Combine(outDir, $"busstop-lab-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
 
+const double Temperature = 0.8;
+bool? thinkSetting = null;
+
 Func<IModelClient> makeClient;
 OllamaAdapter? ollamaAdapter = null;
 string modelConfigVersion;
@@ -49,11 +52,11 @@ switch (modelKind)
                 "Start Ollama and ensure the model is pulled, then retry.");
             return 2;
         }
-        bool? think = argv.Contains("--no-think") ? false : null;
-        ollamaAdapter = new OllamaAdapter(ollamaModel, ollamaUrl, timeout: TimeSpan.FromSeconds(timeoutSeconds), think: think);
+        thinkSetting = argv.Contains("--no-think") ? false : null;
+        ollamaAdapter = new OllamaAdapter(ollamaModel, ollamaUrl, temperature: Temperature, timeout: TimeSpan.FromSeconds(timeoutSeconds), think: thinkSetting);
         makeClient = () => ollamaAdapter;
         modelConfigVersion = $"{ollamaAdapter.ModelName}/{ollamaAdapter.ModelDigest}";
-        System.Console.WriteLine($"Using Ollama model '{ollamaModel}'{(think == false ? " (thinking off)" : "")}. {runs} run(s). The first turn loads the model and can take a while.");
+        System.Console.WriteLine($"Using Ollama model '{ollamaModel}'{(thinkSetting == false ? " (thinking off)" : "")}. {runs} run(s). The first turn loads the model and can take a while.");
         break;
 
     default:
@@ -68,6 +71,14 @@ var engineOptions = modelKind == "ollama"
         MaxAttemptsPerOpportunity: 2,
         Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: 2))
     : new EngineOptions();
+
+var runConfig = new RunConfig(
+    engineOptions.MaxOpportunities,
+    engineOptions.MaxModelCalls,
+    engineOptions.MaxAttemptsPerOpportunity,
+    engineOptions.Coordinator?.EndAfterConsecutivePasses,
+    Temperature,
+    thinkSetting);
 
 Action<string>? trace = modelKind == "ollama"
     ? line => System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}")
@@ -95,7 +106,7 @@ for (var i = 1; i <= runs; i++)
         Laboratory.Cast, Laboratory.Story, engineOptions, trace: trace).Run();
 
     var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
-    var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest);
+    var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest, runConfig);
     var committed = store.GetCommittedUtterances(session).Count;
 
     lastTranscript = transcript;
