@@ -41,7 +41,10 @@ public static class Laboratory
         "roughly 400 workers initially and train them for automated lines. Local officials welcomed the " +
         "news; a former union representative said the wages and the number of jobs are both lower than before.");
 
-    public static SessionId Seed(ConversationStore store, SessionMode mode = SessionMode.FreshEncounter)
+    public static SessionId Seed(
+        ConversationStore store,
+        SessionMode mode = SessionMode.FreshEncounter,
+        string modelConfigVersion = "stub/stub-digest")
     {
         foreach (var c in Cast) store.SaveCharacter(c);
         store.SaveBriefing(Story);
@@ -52,7 +55,7 @@ public static class Laboratory
             mode,
             Story.Id,
             ProtocolVersion: "floor-1",
-            ModelConfigVersion: "stub/stub-digest",
+            ModelConfigVersion: modelConfigVersion,
             ContextVersion: "ctx-1",
             Status: SessionStatus.Active,
             CreatedAt: DateTimeOffset.UtcNow,

@@ -1,38 +1,72 @@
 ﻿using BusStop.Console;
+using BusStop.Domain;
+using BusStop.Engine;
 using BusStop.Models;
 using BusStop.Persistence;
 
-// Minimal laboratory runner for Phase 1. Offline by default: runs the deterministic demo on the stub
-// model, writes a Markdown transcript and a JSON diagnostics sidecar, and prints the transcript.
+// Minimal laboratory runner for Phase 1. Writes a Markdown transcript and a JSON diagnostics sidecar,
+// and prints the transcript.
 //
 // Usage:
-//   dotnet run --project src/BusStop.Console -- [--db <path>] [--out <dir>] [--model stub]
+//   dotnet run --project src/BusStop.Console -- [--model stub|ollama] [--ollama-model <name>]
+//                                              [--ollama-url <url>] [--db <path>] [--out <dir>]
+//
+// The stub model (default) runs a deterministic demo with no external dependency. The ollama model runs
+// a real conversation against a local Ollama server.
 
-var args0 = Environment.GetCommandLineArgs().Skip(1).ToArray();
+var argv = Environment.GetCommandLineArgs().Skip(1).ToArray();
 string? Arg(string name)
 {
-    var i = Array.IndexOf(args0, name);
-    return i >= 0 && i + 1 < args0.Length ? args0[i + 1] : null;
+    var i = Array.IndexOf(argv, name);
+    return i >= 0 && i + 1 < argv.Length ? argv[i + 1] : null;
 }
 
-var model = Arg("--model") ?? "stub";
-if (model != "stub")
-{
-    System.Console.Error.WriteLine($"Model '{model}' is not available yet. Only the stub model is wired in Phase 1 step 7; the Ollama adapter arrives in step 8.");
-    return 2;
-}
-
+var modelKind = Arg("--model") ?? "stub";
 var outDir = Arg("--out") ?? Directory.GetCurrentDirectory();
-var dbPath = Arg("--db") ?? Path.Combine(outDir, $"busstop-lab-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
 Directory.CreateDirectory(outDir);
+var dbPath = Arg("--db") ?? Path.Combine(outDir, $"busstop-lab-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
 
-IModelClient client = Laboratory.DemoModel();
+IModelClient client;
+string modelConfigVersion;
+
+switch (modelKind)
+{
+    case "stub":
+        client = Laboratory.DemoModel();
+        modelConfigVersion = "stub/stub-digest";
+        break;
+
+    case "ollama":
+        var ollamaModel = Arg("--ollama-model") ?? "llama3.2";
+        var ollamaUrl = Arg("--ollama-url") is { } u ? new Uri(u) : null;
+        if (!OllamaAdapter.IsAvailable(ollamaUrl))
+        {
+            System.Console.Error.WriteLine(
+                $"No Ollama server reachable at {ollamaUrl?.ToString() ?? "http://localhost:11434"}. " +
+                "Start Ollama and ensure the model is pulled, then retry.");
+            return 2;
+        }
+        var adapter = new OllamaAdapter(ollamaModel, ollamaUrl);
+        client = adapter;
+        modelConfigVersion = $"{adapter.ModelName}/{adapter.ModelDigest}";
+        break;
+
+    default:
+        System.Console.Error.WriteLine($"Unknown --model '{modelKind}'. Use 'stub' or 'ollama'.");
+        return 2;
+}
 
 using var store = ConversationStore.OpenFile(dbPath);
 store.InitializeSchema();
-var session = Laboratory.Seed(store);
+var session = Laboratory.Seed(store, SessionMode.FreshEncounter, modelConfigVersion);
 
-var result = Laboratory.BuildEngine(store, session, client).Run();
+var options = modelKind == "ollama"
+    ? new EngineOptions(MaxOpportunities: 40, MaxModelCalls: 80, MaxAttemptsPerOpportunity: 2)
+    : new EngineOptions();
+
+var result = new ConversationEngine(
+    store, client, new BusStop.Context.ParticipantContextBuilder(), session,
+    Laboratory.Cast, Laboratory.Story, options).Run();
 
 var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
 var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest);
@@ -42,9 +76,11 @@ var diagnosticsPath = Path.Combine(outDir, "diagnostics.json");
 File.WriteAllText(transcriptPath, transcript);
 File.WriteAllText(diagnosticsPath, diagnostics);
 
+(client as IDisposable)?.Dispose();
+
 System.Console.WriteLine(transcript);
 System.Console.WriteLine("---");
-System.Console.WriteLine($"Termination: {result.Reason}  Opportunities: {result.Opportunities}  Model calls: {result.ModelCalls}");
+System.Console.WriteLine($"Model: {client.ModelName}  Termination: {result.Reason}  Opportunities: {result.Opportunities}  Model calls: {result.ModelCalls}");
 System.Console.WriteLine($"Transcript:  {transcriptPath}");
 System.Console.WriteLine($"Diagnostics: {diagnosticsPath}");
 System.Console.WriteLine($"Database:    {dbPath}");
