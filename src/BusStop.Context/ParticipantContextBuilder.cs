@@ -30,10 +30,14 @@ public sealed record BuiltContext(
 public sealed class ParticipantContextBuilder
 {
     public const string DefaultCompetence =
-        "Speak as this person, in their own voice. Pay attention to what was just said and to anyone " +
-        "who addressed you. You may agree, disagree, ask a question, tell a short relevant story, or say " +
-        "nothing at all. If you have nothing worth adding, pass. Do not announce your personality; let it " +
-        "show in what you say. Keep to one natural conversational turn.";
+        "Speak as this person, in their own voice. Pay attention to what was just said and to anyone who " +
+        "addressed you. Do not restate a point you have already made: if your view has not changed and you " +
+        "have nothing new to add, say so in a few words or stay silent. You can concede when someone is " +
+        "right, build on what they said, bring in a specific memory or example, ask a genuine question, " +
+        "change the subject, or simply pass — silence is a fine choice. Keep it short, usually a sentence " +
+        "or two; you do not have to fill the air. If the conversation has clearly run its course — your " +
+        "point is made, the others are agreeing, or there is nothing new to add — let it rest and pass " +
+        "rather than restating. Do not announce your personality; let it show in what you say.";
 
     private readonly int _recentWindow;
     private readonly string _competence;

@@ -10,11 +10,13 @@ public sealed class OllamaAdapter : IModelClient, IDisposable
 {
     private readonly HttpClient _http;
     private readonly double _temperature;
+    private readonly bool? _think;
 
-    public OllamaAdapter(string model, Uri? endpoint = null, double temperature = 0.8, TimeSpan? timeout = null)
+    public OllamaAdapter(string model, Uri? endpoint = null, double temperature = 0.8, TimeSpan? timeout = null, bool? think = null)
     {
         ModelName = model;
         _temperature = temperature;
+        _think = think;
         _http = new HttpClient
         {
             BaseAddress = endpoint ?? new Uri("http://localhost:11434"),
@@ -43,14 +45,18 @@ public sealed class OllamaAdapter : IModelClient, IDisposable
 
     public ModelResponse Decide(ModelRequest request, CancellationToken cancellationToken = default)
     {
-        var body = new
+        var body = new Dictionary<string, object?>
         {
-            model = ModelName,
-            prompt = request.Prompt,
-            stream = false,
-            format = "json",
-            options = new { temperature = _temperature }
+            ["model"] = ModelName,
+            ["prompt"] = request.Prompt,
+            ["stream"] = false,
+            ["format"] = "json",
+            ["options"] = new { temperature = _temperature }
         };
+        // For reasoning models (e.g. qwen3), think:false skips the hidden reasoning pass, which is a
+        // large speed-up for short conversational turns. Omitted entirely when not specified.
+        if (_think is bool think)
+            body["think"] = think;
 
         try
         {

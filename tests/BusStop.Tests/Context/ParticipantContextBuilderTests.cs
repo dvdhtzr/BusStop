@@ -38,7 +38,7 @@ public class ParticipantContextBuilderTests
 
         Assert.Contains("ARTHUR_SECRET_CREED", built.Prompt);
         Assert.Contains("Factory to reopen", built.Prompt);
-        Assert.Contains("one natural conversational turn", built.Prompt);
+        Assert.Contains("you do not have to fill the air", built.Prompt);
         Assert.Contains("No one has spoken yet.", built.Prompt);
     }
 

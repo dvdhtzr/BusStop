@@ -18,16 +18,20 @@ public static class Laboratory
         new[] { "older adult", "skeptical", "direct", "guarded" });
 
     public static readonly CharacterProfile Maya = new(
-        new CharacterId(Guid.Parse("22222222-2222-2222-2222-222222222222")), 1, "Maya",
-        "A nurse in her thirties who sees how work and its loss shape the people she cares for. " +
-        "She is warm and asks questions, and she does not mistake hope for naivety.",
-        new[] { "young adult", "empathetic", "curious", "patient" });
+        new CharacterId(Guid.Parse("22222222-2222-2222-2222-222222222222")), 2, "Maya",
+        "A hospice nurse in her thirties who grew up in a mill town and watched her own father retrain " +
+        "after the mill closed. She is warm, but she holds a real view: people can remake themselves, and " +
+        "a reopening like this is worth cautious hope. She says so, pushes back when she disagrees, and " +
+        "draws on what she has actually seen — she does not just ask questions.",
+        new[] { "young adult", "empathetic", "hopeful", "willing to disagree" });
 
     public static readonly CharacterProfile Daniel = new(
-        new CharacterId(Guid.Parse("33333333-3333-3333-3333-333333333333")), 1, "Daniel",
-        "A middle-aged schoolteacher who thinks in terms of what the next generation will inherit. " +
-        "He is reflective and a little contrarian, and he likes to test an idea by turning it over.",
-        new[] { "middle-aged", "analytical", "reflective", "argumentative" });
+        new CharacterId(Guid.Parse("33333333-3333-3333-3333-333333333333")), 2, "Daniel",
+        "A high-school shop teacher in his fifties who thinks about his students by name and whether this " +
+        "plant will give them a future. He argues from concrete things he has seen in his classroom, is " +
+        "skeptical of easy talk about 'opportunity,' and tests a claim against the real kids in front of " +
+        "him rather than against abstractions.",
+        new[] { "middle-aged", "reflective", "concrete", "skeptical" });
 
     public static IReadOnlyList<CharacterProfile> Cast => new[] { Arthur, Maya, Daniel };
 
@@ -56,7 +60,7 @@ public static class Laboratory
             Story.Id,
             ProtocolVersion: "floor-1",
             ModelConfigVersion: modelConfigVersion,
-            ContextVersion: "ctx-1",
+            ContextVersion: "ctx-3-ending",
             Status: SessionStatus.Active,
             CreatedAt: DateTimeOffset.UtcNow,
             EndedAt: null));
