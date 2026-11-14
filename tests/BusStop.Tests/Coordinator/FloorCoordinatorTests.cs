@@ -112,25 +112,28 @@ public class FloorCoordinatorTests
             Assert.True(offers < 50, "Coordinator looped instead of ending.");
         }
 
-        // 3 opening passes + 3 ending-check passes, then a natural end.
-        Assert.Equal(6, offers);
+        // One full round of consecutive passes (3) is a natural end.
+        Assert.Equal(3, offers);
         var ended = Assert.IsType<ConversationEnded>(step);
         Assert.Equal(EndReason.NaturalEnd, ended.Reason);
     }
 
     [Fact]
-    public void Speaking_during_the_ending_check_keeps_the_conversation_going()
+    public void A_speak_resets_the_quiet_streak_so_only_consecutive_passes_end_it()
     {
         var coord = new FloorCoordinator(Three);
 
-        // Opening all pass -> one quiet round.
-        foreach (var _ in Three) { var o = AssertOffer(coord.Next()); coord.RecordPassed(o.Participant); }
+        // Two passes, then a speak during the opening: the speak resets the streak.
+        var o1 = AssertOffer(coord.Next()); coord.RecordPassed(o1.Participant);
+        var o2 = AssertOffer(coord.Next()); coord.RecordPassed(o2.Participant);
+        var o3 = AssertOffer(coord.Next()); coord.RecordSpoke(UtteranceId.New(), o3.Participant, null);
 
-        // First ending-check offer: this participant speaks -> interest remains.
-        var revive = AssertOffer(coord.Next());
-        coord.RecordSpoke(UtteranceId.New(), revive.Participant, null);
+        // Not ended — the conversation is still live.
+        var o4 = AssertOffer(coord.Next()); coord.RecordPassed(o4.Participant);
+        var o5 = AssertOffer(coord.Next()); coord.RecordPassed(o5.Participant);
+        var o6 = AssertOffer(coord.Next()); coord.RecordPassed(o6.Participant);
 
-        // The conversation has not ended; the next step is another offer.
-        AssertOffer(coord.Next());
+        // Three consecutive passes after the reset end it.
+        Assert.IsType<ConversationEnded>(coord.Next());
     }
 }

@@ -2,7 +2,7 @@ using BusStop.Domain;
 
 namespace BusStop.Coordinator;
 
-public sealed record CoordinatorOptions(int PingPongWindow = 4);
+public sealed record CoordinatorOptions(int PingPongWindow = 4, int? EndAfterConsecutivePasses = null);
 
 /// <summary>Why a conversation ended on its own terms. Budget and observer stops are engine-level
 /// terminations, kept separate so a natural ending is never confused with hitting a ceiling.</summary>
@@ -38,12 +38,14 @@ public sealed class FloorCoordinator
     public FloorCoordinator(IReadOnlyList<CharacterId> participants, CoordinatorOptions? options = null)
     {
         if (participants.Count == 0) throw new ArgumentException("A conversation needs participants.", nameof(participants));
+        var opts = options ?? new CoordinatorOptions();
         _participants = participants;
-        _pingPongWindow = (options ?? new CoordinatorOptions()).PingPongWindow;
+        _pingPongWindow = opts.PingPongWindow;
         _opening = new Queue<CharacterId>(participants);
         _lastOffered = participants.ToDictionary(p => p, _ => 0L);
-        // A full quiet round, then a silent ending-check round.
-        _endThreshold = 2 * participants.Count;
+        // End after one full round of consecutive passes: when everyone declines in turn, the
+        // conversation has run its course. (Two full rounds proved unreachable for talkative models.)
+        _endThreshold = opts.EndAfterConsecutivePasses ?? participants.Count;
     }
 
     public CoordinatorStep Next()

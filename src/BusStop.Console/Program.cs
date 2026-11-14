@@ -65,7 +65,7 @@ store.InitializeSchema();
 var session = Laboratory.Seed(store, SessionMode.FreshEncounter, modelConfigVersion);
 
 var options = modelKind == "ollama"
-    ? new EngineOptions(MaxOpportunities: 40, MaxModelCalls: 80, MaxAttemptsPerOpportunity: 2)
+    ? new EngineOptions(MaxOpportunities: 24, MaxModelCalls: 48, MaxAttemptsPerOpportunity: 2)
     : new EngineOptions();
 
 Action<string>? trace = modelKind == "ollama"

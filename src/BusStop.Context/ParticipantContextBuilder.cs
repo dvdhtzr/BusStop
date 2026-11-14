@@ -35,7 +35,9 @@ public sealed class ParticipantContextBuilder
         "have nothing new to add, say so in a few words or stay silent. You can concede when someone is " +
         "right, build on what they said, bring in a specific memory or example, ask a genuine question, " +
         "change the subject, or simply pass — silence is a fine choice. Keep it short, usually a sentence " +
-        "or two; you do not have to fill the air. Do not announce your personality; let it show in what you say.";
+        "or two; you do not have to fill the air. If the conversation has clearly run its course — your " +
+        "point is made, the others are agreeing, or there is nothing new to add — let it rest and pass " +
+        "rather than restating. Do not announce your personality; let it show in what you say.";
 
     private readonly int _recentWindow;
     private readonly string _competence;
