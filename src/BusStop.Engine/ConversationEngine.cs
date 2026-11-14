@@ -38,6 +38,7 @@ public sealed class ConversationEngine
     private readonly Briefing _briefing;
     private readonly EngineOptions _options;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly Action<string>? _trace;
 
     private readonly FloorCoordinator _coordinator;
     private int _opportunityOrdinal;
@@ -51,7 +52,8 @@ public sealed class ConversationEngine
         IReadOnlyList<CharacterProfile> participants,
         Briefing briefing,
         EngineOptions? options = null,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        Action<string>? trace = null)
     {
         _store = store;
         _model = model;
@@ -60,6 +62,7 @@ public sealed class ConversationEngine
         _briefing = briefing;
         _options = options ?? new EngineOptions();
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _trace = trace;
         _handles = participants.Select(p => new ParticipantHandle(p.Id, p.Name)).ToList();
         _profiles = participants.ToDictionary(p => p.Id);
 
@@ -128,6 +131,7 @@ public sealed class ConversationEngine
         _store.SaveOpportunity(opportunity, _opportunityOrdinal);
 
         var self = _profiles[offer.Participant];
+        _trace?.Invoke($"… {self.Name} has the floor ({offer.Reason}); thinking…");
         var history = _store.GetCommittedUtterances(_session);
         var built = _builder.Build(new ContextInputs(self, _handles, _briefing, history, opportunity));
 
@@ -170,17 +174,20 @@ public sealed class ConversationEngine
                 _store.SaveDecision(new ParticipantDecision(
                     opportunityId, offer.Participant, DecisionAction.Speak, decision.Addressee, repliesTo, lastAttempt));
                 _coordinator.RecordSpoke(utterance.Id, offer.Participant, decision.Addressee);
+                _trace?.Invoke($"  {self.Name}: {decision.Text}");
                 break;
 
             case AttemptOutcome.ValidPass:
                 _store.SaveDecision(new ParticipantDecision(
                     opportunityId, offer.Participant, DecisionAction.Pass, null, null, lastAttempt));
                 _coordinator.RecordPassed(offer.Participant);
+                _trace?.Invoke($"  {self.Name} stays quiet.");
                 break;
 
             default:
                 // A failure after bounded retries: no utterance, no decision, not a pass.
                 _coordinator.RecordFailure(offer.Participant);
+                _trace?.Invoke($"  {self.Name}: [no valid response — {decision.Outcome}]");
                 break;
         }
 

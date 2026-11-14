@@ -39,6 +39,7 @@ switch (modelKind)
     case "ollama":
         var ollamaModel = Arg("--ollama-model") ?? "llama3.2";
         var ollamaUrl = Arg("--ollama-url") is { } u ? new Uri(u) : null;
+        var timeoutSeconds = int.TryParse(Arg("--ollama-timeout"), out var t) ? t : 300;
         if (!OllamaAdapter.IsAvailable(ollamaUrl))
         {
             System.Console.Error.WriteLine(
@@ -46,7 +47,9 @@ switch (modelKind)
                 "Start Ollama and ensure the model is pulled, then retry.");
             return 2;
         }
-        var adapter = new OllamaAdapter(ollamaModel, ollamaUrl);
+        System.Console.WriteLine($"Using Ollama model '{ollamaModel}'. The first turn loads the model and can take a while; progress appears per turn below.");
+        System.Console.WriteLine();
+        var adapter = new OllamaAdapter(ollamaModel, ollamaUrl, timeout: TimeSpan.FromSeconds(timeoutSeconds));
         client = adapter;
         modelConfigVersion = $"{adapter.ModelName}/{adapter.ModelDigest}";
         break;
@@ -66,7 +69,8 @@ var options = modelKind == "ollama"
 
 var result = new ConversationEngine(
     store, client, new BusStop.Context.ParticipantContextBuilder(), session,
-    Laboratory.Cast, Laboratory.Story, options).Run();
+    Laboratory.Cast, Laboratory.Story, options,
+    trace: modelKind == "ollama" ? System.Console.WriteLine : null).Run();
 
 var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
 var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest);
@@ -80,6 +84,8 @@ File.WriteAllText(diagnosticsPath, diagnostics);
 
 var committedCount = store.GetCommittedUtterances(session).Count;
 
+System.Console.WriteLine();
+System.Console.WriteLine("==== final transcript ====");
 System.Console.WriteLine(transcript);
 System.Console.WriteLine("---");
 System.Console.WriteLine($"Model: {client.ModelName}  Termination: {result.Reason}  Opportunities: {result.Opportunities}  Model calls: {result.ModelCalls}");
