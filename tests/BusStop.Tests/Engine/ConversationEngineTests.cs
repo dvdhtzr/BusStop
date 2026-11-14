@@ -102,7 +102,9 @@ public sealed class ConversationEngineTests : IDisposable
         var session = SeedSession(store);
         var result = Engine(store, session, new StubModelClient(script), new EngineOptions(MaxAttemptsPerOpportunity: 2)).Run();
 
-        Assert.Equal(TerminationReason.NaturalEnd, result.Reason);
+        // Nobody committed anything (the one speaker's attempts all failed), so the conversation never
+        // started: it ends as NoEngagement, not as a natural conclusion.
+        Assert.Equal(TerminationReason.NoEngagement, result.Reason);
         Assert.Empty(store.GetCommittedUtterances(session));
     }
 
@@ -127,7 +129,9 @@ public sealed class ConversationEngineTests : IDisposable
         var passes = Enumerable.Repeat(StubResponses.Pass(), 20).ToArray();
         var result = Engine(store, session, new StubModelClient(passes)).Run();
 
-        Assert.Equal(TerminationReason.NaturalEnd, result.Reason);
+        // The crash-interrupted speak was never delivered and nobody else spoke, so it ends as
+        // NoEngagement with no committed utterances.
+        Assert.Equal(TerminationReason.NoEngagement, result.Reason);
         Assert.Empty(store.GetCommittedUtterances(session));
     }
 

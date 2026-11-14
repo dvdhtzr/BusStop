@@ -20,7 +20,10 @@ public sealed record EngineOptions(
 public enum TerminationReason
 {
     NaturalEnd,
-    BudgetReached
+    BudgetReached,
+
+    /// <summary>No one ever spoke: the conversation never started, as opposed to concluding.</summary>
+    NoEngagement
 }
 
 public sealed record RunResult(TerminationReason Reason, int Opportunities, int ModelCalls);
@@ -115,10 +118,13 @@ public sealed class ConversationEngine
             }
 
             var step = _coordinator.Next();
-            if (step is ConversationEnded)
+            if (step is ConversationEnded ended)
             {
                 _store.UpdateSessionStatus(_session, SessionStatus.Ended, _clock());
-                return new RunResult(TerminationReason.NaturalEnd, _opportunityOrdinal, _modelCalls);
+                var reason = ended.Reason == EndReason.NoEngagement
+                    ? TerminationReason.NoEngagement
+                    : TerminationReason.NaturalEnd;
+                return new RunResult(reason, _opportunityOrdinal, _modelCalls);
             }
 
             var offer = (Offer)step;
