@@ -2,7 +2,7 @@
   "profiles": {
     "BusStop.Console (Ollama)": {
       "commandName": "Project",
-      "commandLineArgs": "--model ollama --ollama-model qwen3.5:9b"
+      "commandLineArgs": "--model ollama --ollama-model qwen3:4b"
     },
     "BusStop.Console (stub demo)": {
       "commandName": "Project"

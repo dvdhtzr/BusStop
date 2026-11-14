@@ -67,10 +67,13 @@ var options = modelKind == "ollama"
     ? new EngineOptions(MaxOpportunities: 40, MaxModelCalls: 80, MaxAttemptsPerOpportunity: 2)
     : new EngineOptions();
 
+Action<string>? trace = modelKind == "ollama"
+    ? line => System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}")
+    : null;
+
 var result = new ConversationEngine(
     store, client, new BusStop.Context.ParticipantContextBuilder(), session,
-    Laboratory.Cast, Laboratory.Story, options,
-    trace: modelKind == "ollama" ? System.Console.WriteLine : null).Run();
+    Laboratory.Cast, Laboratory.Story, options, trace: trace).Run();
 
 var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
 var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest);

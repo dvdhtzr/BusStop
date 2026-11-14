@@ -99,6 +99,9 @@ public sealed class ConversationEngine
         return coordinator;
     }
 
+    private static string Snippet(string? raw) =>
+        raw is null ? "(no body)" : (raw.Length > 400 ? raw[..400] + "…" : raw).Replace("\n", " ").Replace("\r", " ");
+
     public RunResult Run(CancellationToken cancellationToken = default)
     {
         while (true)
@@ -161,6 +164,8 @@ public sealed class ConversationEngine
 
             if (!OutcomeClassification.IsFailure(decision.Outcome))
                 break;
+
+            _trace?.Invoke($"    attempt {i + 1} failed ({decision.Outcome}); raw: {Snippet(response.RawJson)}");
         }
 
         switch (decision.Outcome)
