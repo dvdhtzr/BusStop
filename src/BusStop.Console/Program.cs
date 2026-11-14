@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using BusStop.Console;
+using BusStop.Coordinator;
 using BusStop.Domain;
 using BusStop.Engine;
 using BusStop.Models;
@@ -61,7 +62,11 @@ switch (modelKind)
 }
 
 var engineOptions = modelKind == "ollama"
-    ? new EngineOptions(MaxOpportunities: 24, MaxModelCalls: 48, MaxAttemptsPerOpportunity: 2)
+    ? new EngineOptions(
+        MaxOpportunities: 18,
+        MaxModelCalls: 36,
+        MaxAttemptsPerOpportunity: 2,
+        Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: 2))
     : new EngineOptions();
 
 Action<string>? trace = modelKind == "ollama"
