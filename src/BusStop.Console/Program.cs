@@ -49,7 +49,8 @@ switch (modelKind)
         }
         System.Console.WriteLine($"Using Ollama model '{ollamaModel}'. The first turn loads the model and can take a while; progress appears per turn below.");
         System.Console.WriteLine();
-        var adapter = new OllamaAdapter(ollamaModel, ollamaUrl, timeout: TimeSpan.FromSeconds(timeoutSeconds));
+        bool? think = argv.Contains("--no-think") ? false : null;
+        var adapter = new OllamaAdapter(ollamaModel, ollamaUrl, timeout: TimeSpan.FromSeconds(timeoutSeconds), think: think);
         client = adapter;
         modelConfigVersion = $"{adapter.ModelName}/{adapter.ModelDigest}";
         break;
