@@ -108,21 +108,83 @@ public sealed class ConversationStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    public void SaveOpportunity(SpeakingOpportunity o)
+    public void SaveOpportunity(SpeakingOpportunity o, int ordinal)
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
             INSERT OR REPLACE INTO speaking_opportunities
-                (id, session_id, intended_participant, reason, committed_boundary, status)
-            VALUES (@id, @s, @p, @reason, @boundary, @status);
+                (id, session_id, ordinal, intended_participant, reason, committed_boundary, status)
+            VALUES (@id, @s, @ordinal, @p, @reason, @boundary, @status);
             """;
         cmd.Parameters.AddWithValue("@id", o.Id.ToString());
         cmd.Parameters.AddWithValue("@s", o.Session.ToString());
+        cmd.Parameters.AddWithValue("@ordinal", ordinal);
         cmd.Parameters.AddWithValue("@p", o.IntendedParticipant.ToString());
         cmd.Parameters.AddWithValue("@reason", o.Reason.ToString());
         cmd.Parameters.AddWithValue("@boundary", o.CommittedBoundary);
         cmd.Parameters.AddWithValue("@status", o.Status.ToString());
         cmd.ExecuteNonQuery();
+    }
+
+    public void UpdateOpportunityStatus(OpportunityId id, OpportunityStatus status)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "UPDATE speaking_opportunities SET status = @status WHERE id = @id;";
+        cmd.Parameters.AddWithValue("@status", status.ToString());
+        cmd.Parameters.AddWithValue("@id", id.ToString());
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Reconstructs the ordered opportunities of a session with the outcome each one reached,
+    /// derived from durable records: a committed utterance means Spoke; a Pass decision means Passed;
+    /// anything else — including a would-be speak whose commit never landed — is Failed and was never
+    /// delivered. This is what makes resume exactly-once.</summary>
+    public IReadOnlyList<RecordedOpportunity> GetRecordedOpportunities(SessionId session)
+    {
+        var result = new List<RecordedOpportunity>();
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT o.id, o.ordinal, o.intended_participant, o.reason,
+                   u.id, u.addressee,
+                   d.action
+            FROM speaking_opportunities o
+            LEFT JOIN utterances u ON u.opportunity_id = o.id
+            LEFT JOIN participant_decisions d ON d.opportunity_id = o.id
+            WHERE o.session_id = @s
+            ORDER BY o.ordinal ASC;
+            """;
+        cmd.Parameters.AddWithValue("@s", session.ToString());
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            var oppId = OpportunityId.Parse(r.GetString(0));
+            var ordinal = r.GetInt32(1);
+            var participant = CharacterId.Parse(r.GetString(2));
+            var reason = Enum.Parse<OpportunityReason>(r.GetString(3));
+
+            ReplayOutcome outcome;
+            UtteranceId? utterance = null;
+            CharacterId? addressee = null;
+
+            if (!r.IsDBNull(4))
+            {
+                outcome = ReplayOutcome.Spoke;
+                utterance = UtteranceId.Parse(r.GetString(4));
+                addressee = r.IsDBNull(5) ? null : CharacterId.Parse(r.GetString(5));
+            }
+            else if (!r.IsDBNull(6) && Enum.Parse<DecisionAction>(r.GetString(6)) == DecisionAction.Pass)
+            {
+                outcome = ReplayOutcome.Passed;
+            }
+            else
+            {
+                outcome = ReplayOutcome.Failed;
+            }
+
+            result.Add(new RecordedOpportunity(oppId, ordinal, participant, reason, outcome, utterance, addressee));
+        }
+
+        return result;
     }
 
     public void SaveAttempt(ModelAttempt a)

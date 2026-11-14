@@ -33,7 +33,7 @@ public sealed class ConversationStoreTests : IDisposable
             store.SaveCharacter(new CharacterProfile(charId, 1, "Arthur", "A retired machinist.", new[] { "ornery", "curious" }));
             store.SaveBriefing(new Briefing(briefingId, "Factory reopens", "The Wire", "https://example.com/a", "Body."));
             store.CreateSession(MinimalSession(sessionId, new[] { charId }, briefingId));
-            store.SaveOpportunity(new SpeakingOpportunity(oppId, sessionId, charId, OpportunityReason.Opening, 0, OpportunityStatus.Decided));
+            store.SaveOpportunity(new SpeakingOpportunity(oppId, sessionId, charId, OpportunityReason.Opening, 0, OpportunityStatus.Decided), ordinal: 0);
             store.CommitUtterance(oppId, sessionId, charId, "I remember that plant.", null, null, now);
         }
 

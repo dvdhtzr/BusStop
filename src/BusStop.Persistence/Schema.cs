@@ -46,10 +46,12 @@ internal static class Schema
         CREATE TABLE IF NOT EXISTS speaking_opportunities (
             id                   TEXT PRIMARY KEY,
             session_id           TEXT NOT NULL,
+            ordinal              INTEGER NOT NULL,
             intended_participant TEXT NOT NULL,
             reason               TEXT NOT NULL,
             committed_boundary   INTEGER NOT NULL,
-            status               TEXT NOT NULL
+            status               TEXT NOT NULL,
+            UNIQUE (session_id, ordinal)
         );
 
         CREATE TABLE IF NOT EXISTS model_attempts (
