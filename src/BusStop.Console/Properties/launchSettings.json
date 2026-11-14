@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "BusStop.Console (Ollama)": {
+      "commandName": "Project",
+      "commandLineArgs": "--model ollama --ollama-model gemma4:latest"
+    },
+    "BusStop.Console (stub demo)": {
+      "commandName": "Project"
+    }
+  }
+}

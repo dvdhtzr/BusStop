@@ -78,9 +78,17 @@ File.WriteAllText(diagnosticsPath, diagnostics);
 
 (client as IDisposable)?.Dispose();
 
+var committedCount = store.GetCommittedUtterances(session).Count;
+
 System.Console.WriteLine(transcript);
 System.Console.WriteLine("---");
 System.Console.WriteLine($"Model: {client.ModelName}  Termination: {result.Reason}  Opportunities: {result.Opportunities}  Model calls: {result.ModelCalls}");
+if (modelKind == "ollama" && committedCount == 0)
+{
+    System.Console.Error.WriteLine(
+        "WARNING: no one spoke — every model call failed. Check that Ollama is running and that " +
+        $"--ollama-model ('{Arg("--ollama-model") ?? "llama3.2"}') exactly matches a name from `ollama list`.");
+}
 System.Console.WriteLine($"Transcript:  {transcriptPath}");
 System.Console.WriteLine($"Diagnostics: {diagnosticsPath}");
 System.Console.WriteLine($"Database:    {dbPath}");
