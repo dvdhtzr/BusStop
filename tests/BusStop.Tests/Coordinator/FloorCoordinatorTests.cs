@@ -99,7 +99,7 @@ public class FloorCoordinatorTests
     }
 
     [Fact]
-    public void Full_quiet_round_reaches_a_natural_end_without_looping()
+    public void No_one_engaging_ends_without_looping()
     {
         var coord = new FloorCoordinator(Three);
 
@@ -112,9 +112,25 @@ public class FloorCoordinatorTests
             Assert.True(offers < 50, "Coordinator looped instead of ending.");
         }
 
-        // One full round of consecutive passes (3) is a natural end.
-        Assert.Equal(3, offers);
+        // No one ever spoke: the conversation never started, ended after a bounded number of offers.
+        Assert.Equal(6, offers);
         var ended = Assert.IsType<ConversationEnded>(step);
+        Assert.Equal(EndReason.NoEngagement, ended.Reason);
+    }
+
+    [Fact]
+    public void Natural_end_fires_only_after_the_conversation_has_started()
+    {
+        var coord = new FloorCoordinator(Three);
+
+        // Someone speaks during opening, so the conversation has started.
+        var o1 = AssertOffer(coord.Next()); coord.RecordSpoke(UtteranceId.New(), o1.Participant, null);
+        var o2 = AssertOffer(coord.Next()); coord.RecordPassed(o2.Participant);
+        var o3 = AssertOffer(coord.Next()); coord.RecordPassed(o3.Participant);
+        var o4 = AssertOffer(coord.Next()); coord.RecordPassed(o4.Participant);
+
+        // One full round of consecutive passes after a start is a natural end.
+        var ended = Assert.IsType<ConversationEnded>(coord.Next());
         Assert.Equal(EndReason.NaturalEnd, ended.Reason);
     }
 

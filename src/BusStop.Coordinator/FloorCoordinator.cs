@@ -8,7 +8,11 @@ public sealed record CoordinatorOptions(int PingPongWindow = 4, int? EndAfterCon
 /// terminations, kept separate so a natural ending is never confused with hitting a ceiling.</summary>
 public enum EndReason
 {
-    NaturalEnd
+    NaturalEnd,
+
+    /// <summary>Everyone declined and no one ever spoke — the conversation never started. Distinct from a
+    /// natural conclusion, which requires it to have begun.</summary>
+    NoEngagement
 }
 
 public abstract record CoordinatorStep;
@@ -27,12 +31,14 @@ public sealed class FloorCoordinator
     private readonly IReadOnlyList<CharacterId> _participants;
     private readonly int _pingPongWindow;
     private readonly int _endThreshold;
+    private readonly int _noEngagementThreshold;
 
     private readonly Queue<CharacterId> _opening;
     private readonly Dictionary<CharacterId, long> _lastOffered;
     private readonly List<CharacterId> _recentSpeakers = new();
     private long _tick;
     private int _quietStreak;
+    private bool _hasSpoken;
     private (CharacterId Addressee, UtteranceId Utterance)? _pendingReply;
 
     public FloorCoordinator(IReadOnlyList<CharacterId> participants, CoordinatorOptions? options = null)
@@ -46,6 +52,8 @@ public sealed class FloorCoordinator
         // End after one full round of consecutive passes: when everyone declines in turn, the
         // conversation has run its course. (Two full rounds proved unreachable for talkative models.)
         _endThreshold = opts.EndAfterConsecutivePasses ?? participants.Count;
+        // If no one ever speaks, give the room a couple of rounds before declaring it never started.
+        _noEngagementThreshold = 2 * participants.Count;
     }
 
     public CoordinatorStep Next()
@@ -54,9 +62,13 @@ public sealed class FloorCoordinator
         if (_opening.Count > 0)
             return OfferTo(_opening.Dequeue(), OpportunityReason.Opening, null);
 
-        // A full quiet round followed by a silent ending-check round is a natural end.
-        if (_quietStreak >= _endThreshold)
+        // A natural end requires that the conversation actually started.
+        if (_hasSpoken && _quietStreak >= _endThreshold)
             return new ConversationEnded(EndReason.NaturalEnd);
+
+        // No one ever engaged after a bounded number of offers: the conversation never started.
+        if (!_hasSpoken && _quietStreak >= _noEngagementThreshold)
+            return new ConversationEnded(EndReason.NoEngagement);
 
         if (_pendingReply is { } pending)
         {
@@ -79,6 +91,7 @@ public sealed class FloorCoordinator
     public void RecordSpoke(UtteranceId utterance, CharacterId speaker, CharacterId? addressee)
     {
         _quietStreak = 0;
+        _hasSpoken = true;
         _recentSpeakers.Add(speaker);
         _pendingReply = addressee is { } a ? (a, utterance) : null;
     }
