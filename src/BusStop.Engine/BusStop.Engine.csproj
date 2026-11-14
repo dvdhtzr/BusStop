@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\BusStop.Domain\BusStop.Domain.csproj" />
+    <ProjectReference Include="..\BusStop.Persistence\BusStop.Persistence.csproj" />
+    <ProjectReference Include="..\BusStop.Models\BusStop.Models.csproj" />
+    <ProjectReference Include="..\BusStop.Context\BusStop.Context.csproj" />
+    <ProjectReference Include="..\BusStop.Coordinator\BusStop.Coordinator.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

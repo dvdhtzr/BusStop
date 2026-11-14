@@ -482,3 +482,9 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# BusStop laboratory run artifacts
+.labrun/
+*.db
+*.db-journal
+*.db-wal
