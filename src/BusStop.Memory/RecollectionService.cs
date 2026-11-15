@@ -30,6 +30,10 @@ public sealed class RecollectionService
         foreach (var s in priorSessions)
             heard.AddRange(_store.GetCommittedUtterances(s));
 
+        // Recall the situation and what OTHERS said — not a transcript of one's own lines. Surfacing a
+        // participant's own words back to them tempts verbatim self-repeat in the continuing conversation.
+        heard = heard.Where(u => u.Speaker != participant).ToList();
+
         // Rotate selection by how many prior conversations there have been, so a second or third
         // continuation does not surface the same spread as the first.
         var selected = SelectSpread(heard, opts.MaxRecollections, priorSessions.Count - 1);

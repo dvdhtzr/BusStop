@@ -81,7 +81,7 @@ public sealed class ParticipantContextBuilder
         if (recollections.Count > 0)
         {
             sb.AppendLine("# When you last talked with them");
-            sb.AppendLine("You have met these people before. Some of what was said then — recall it only if it is worth bringing up, do not simply repeat it:");
+            sb.AppendLine("You have talked with these people before. Here is roughly where things stood — some of what the others said last time. Let it inform how you respond to them now, but move the conversation forward: do not restate these lines or simply repeat your old points.");
             foreach (var rec in recollections)
             {
                 var who = nameById.TryGetValue(rec.Speaker, out var rn) ? rn : "Someone";

@@ -87,6 +87,22 @@ public sealed class RecollectionServiceTests : IDisposable
     }
 
     [Fact]
+    public void Recollections_exclude_the_participants_own_lines()
+    {
+        using var store = Open();
+        SeedEndedSession(store, new[] { A, B, C }, new[]
+        {
+            (A, "A OWN LINE"), (B, "B heard line"), (C, "C heard line")
+        }, DateTimeOffset.UtcNow.AddHours(-1));
+
+        var service = new RecollectionService(store);
+        var recollections = service.Recall(A, new[] { A, B, C }, SessionId.New());
+
+        Assert.NotEmpty(recollections);
+        Assert.DoesNotContain(recollections, r => r.Speaker == A);   // never one's own words
+    }
+
+    [Fact]
     public void Does_not_recall_sessions_with_a_different_participant_set()
     {
         using var store = Open();
