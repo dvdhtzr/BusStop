@@ -28,6 +28,36 @@ string? Arg(string name)
     return i >= 0 && i + 1 < argv.Length ? argv[i + 1] : null;
 }
 
+// Read-only evaluation of the private, historical FAA shadow audit.
+if (argv.Contains("--evaluate-shadow-audit"))
+{
+    var auditPath = Arg("--evaluate-shadow-audit");
+    if (string.IsNullOrWhiteSpace(auditPath) ||
+        argv.Any(x => x is "--model" or "--discuss-document" or "--inspect-document" or
+            "--shadow-moderator" or "--runs" or "--continuing"))
+    {
+        System.Console.Error.WriteLine(
+            "Usage: --evaluate-shadow-audit <private shadow.json> [--corpus <labels.json>]");
+        return 2;
+    }
+    var labelsPath = Arg("--corpus") ??
+        Path.Combine("docs", "moderator", "corpus", "faa-shadow-v1.labels.json");
+    try
+    {
+        var metrics = ShadowCorpusEvaluator.Evaluate(
+            File.ReadAllText(auditPath), File.ReadAllText(labelsPath));
+        System.Console.WriteLine(JsonSerializer.Serialize(metrics,
+            new JsonSerializerOptions { WriteIndented = true }));
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+        JsonException or InvalidDataException or ArgumentException)
+    {
+        System.Console.Error.WriteLine($"Corpus evaluation failed: {ex.Message}");
+        return 2;
+    }
+}
+
 // Inspection proves local evidence capture without sending document text to Ollama
 // or changing any existing conversation or memory behavior.
 if (argv.Contains("--inspect-document"))
