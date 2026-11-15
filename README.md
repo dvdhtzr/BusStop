@@ -43,6 +43,23 @@ documents (Phase 0 architecture and Phase 1 plan). Key principles:
 - SQLite for persistence
 - A local model (Ollama) behind `IModelClient`, exercised only in the acceptance project
 
+## Real content — first source milestone
+
+R1a introduces a common evidence snapshot for future **today's-news**
+and **user-document RAG** inputs. It can already inspect a private UTF-8
+`.txt` or `.md` file locally, producing a stable content fingerprint
+and citation-ready passage identifiers:
+
+```powershell
+dotnet run --project .\src\BusStop.Console -- --inspect-document "C:\path\to\notes.md"
+```
+
+This mode makes **no Ollama call** and does **not** yet start a
+document-grounded conversation or perform RAG retrieval. See
+[the R1a design and test boundary](docs/real-content/r1a-evidence-snapshots.md).
+The existing conversation engine, prompts, and fictional lab scenarios
+remain unchanged.
+
 ## Building
 
 ```bash

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BusStop.Engine\BusStop.Engine.csproj" />
+    <ProjectReference Include="..\BusStop.Sources\BusStop.Sources.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

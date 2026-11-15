@@ -6,6 +6,7 @@ using BusStop.Engine;
 using BusStop.Memory;
 using BusStop.Models;
 using BusStop.Persistence;
+using BusStop.Sources;
 
 // Minimal laboratory runner for Phase 1. Writes a Markdown transcript and a JSON diagnostics sidecar,
 // and prints the transcript. With --runs N it runs N independent conversations and writes one combined
@@ -15,12 +16,46 @@ using BusStop.Persistence;
 //   dotnet run --project src/BusStop.Console -- [--model stub|ollama] [--ollama-model <name>]
 //       [--ollama-url <url>] [--no-think] [--ollama-timeout <seconds>] [--runs <n>] [--db <path>] [--out <dir>]
 //       [--continuing | --fresh-bridge] [--c2-attribution]
+//   dotnet run --project src/BusStop.Console -- --inspect-document <file.txt|file.md>
 
 var argv = Environment.GetCommandLineArgs().Skip(1).ToArray();
 string? Arg(string name)
 {
     var i = Array.IndexOf(argv, name);
     return i >= 0 && i + 1 < argv.Length ? argv[i + 1] : null;
+}
+
+// Inspection proves local evidence capture without sending document text to Ollama
+// or changing any existing conversation or memory behavior.
+if (argv.Contains("--inspect-document"))
+{
+    if (string.IsNullOrWhiteSpace(Arg("--inspect-document")) ||
+        argv.Any(x => x is "--model" or "--continuing" or "--fresh-bridge" or
+            "--c2-attribution" or "--runs" or "--db" or "--out"))
+    {
+        System.Console.Error.WriteLine(
+            "Usage: --inspect-document <file.txt|file.md> (no conversation flags).");
+        return 2;
+    }
+
+    try
+    {
+        var evidence = new LocalTextDocumentImporter().Import(Arg("--inspect-document")!);
+        System.Console.WriteLine($"Captured local document: {evidence.Descriptor.Title}");
+        System.Console.WriteLine($"Snapshot: {evidence.SnapshotId}");
+        System.Console.WriteLine($"Text SHA-256: {evidence.TextSha256}");
+        System.Console.WriteLine($"Characters: {evidence.SnapshotText.Length}");
+        System.Console.WriteLine($"Citable passages: {evidence.Passages.Count}");
+        System.Console.WriteLine($"First passage ID: {evidence.Passages[0].PassageId}");
+        System.Console.WriteLine("Inspection only: no Ollama call, conversation, or RAG retrieval.");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+        NotSupportedException or ArgumentException)
+    {
+        System.Console.Error.WriteLine($"Document inspection failed: {ex.Message}");
+        return 2;
+    }
 }
 
 var modelKind = Arg("--model") ?? "stub";

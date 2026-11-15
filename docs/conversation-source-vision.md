@@ -1,8 +1,10 @@
 # BusStop — conversation source vision
 
-**Status:** Approved product goal, **not an implemented feature**.
-This note keeps experimental fixture work aligned with the intended
-experience without authorizing an ingestion or retrieval implementation.
+**Status:** Approved product goal. R1a adds source-neutral evidence
+snapshots and local text-document inspection; **live news selection,
+document-grounded conversations, and RAG retrieval remain unimplemented**.
+This note keeps the research and source-ingestion work aligned with
+the intended experience.
 
 ## The intended encounter
 
@@ -54,11 +56,14 @@ they do not prohibit plausible fictional imagination.
   fictional factory and bridge briefing fixtures.
 - **C2:** Test one opt-in instruction against invented interpersonal
   history. No news/RAG infrastructure is introduced.
-- **Later, with separate design approval:** Build and evaluate the
-  real-time news discovery and document-ingestion/RAG pathways.
-  Assess source permissions, licenses, update behavior, provenance,
-  local privacy, prompt injection boundaries, multi-document
-  retrieval, and citation quality before implementation.
+- **R1a (first real-content slice):** Source-neutral provenance,
+  stable passage citations, and local UTF-8 document inspection.
+- **R1b / R1c:** Durably pin evidence to conversation sessions and
+  implement local document-grounded retrieval, with further format
+  support and measured retrieval quality.
+- **R2:** Design and implement real-time, rights-eligible news selection
+  with verified publication dates, provenance, local privacy,
+  prompt-injection boundaries, and accurate source citations.
 
 The goal is **credible relationships and conversations grounded in
 interesting, user-relevant material**, not an endless series of
