@@ -32,8 +32,9 @@ public sealed class ConversationStore : IDisposable
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
-            INSERT OR REPLACE INTO characters (id, version, name, persona, traits)
-            VALUES (@id, @version, @name, @persona, @traits);
+            INSERT INTO characters (id, version, name, persona, traits)
+            VALUES (@id, @version, @name, @persona, @traits)
+            ON CONFLICT(id, version) DO NOTHING;
             """;
         cmd.Parameters.AddWithValue("@id", c.Id.ToString());
         cmd.Parameters.AddWithValue("@version", c.Version);
@@ -41,14 +42,25 @@ public sealed class ConversationStore : IDisposable
         cmd.Parameters.AddWithValue("@persona", c.Persona);
         cmd.Parameters.AddWithValue("@traits", JsonSerializer.Serialize(c.Traits));
         cmd.ExecuteNonQuery();
+
+        // Character versions are append-only. Idempotent identical saves are permitted,
+        // but an edit to the same version must be explicitly rejected.
+        var stored = GetCharacter(c.Id, c.Version)
+            ?? throw new InvalidOperationException("Character was not persisted.");
+        if (!string.Equals(stored.Name, c.Name, StringComparison.Ordinal) ||
+            !string.Equals(stored.Persona, c.Persona, StringComparison.Ordinal) ||
+            !stored.Traits.SequenceEqual(c.Traits, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"Character {c.Id} v{c.Version} is immutable; save a new version.");
     }
 
     public void SaveBriefing(Briefing b)
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
-            INSERT OR REPLACE INTO briefings (id, title, source, url, body)
-            VALUES (@id, @title, @source, @url, @body);
+            INSERT INTO briefings (id, title, source, url, body)
+            VALUES (@id, @title, @source, @url, @body)
+            ON CONFLICT(id) DO NOTHING;
             """;
         cmd.Parameters.AddWithValue("@id", b.Id.ToString());
         cmd.Parameters.AddWithValue("@title", b.Title);
@@ -56,6 +68,16 @@ public sealed class ConversationStore : IDisposable
         cmd.Parameters.AddWithValue("@url", b.Url);
         cmd.Parameters.AddWithValue("@body", b.Body);
         cmd.ExecuteNonQuery();
+
+        // A briefing ID must always describe the facts actually seen by the session.
+        var stored = GetBriefing(b.Id)
+            ?? throw new InvalidOperationException("Briefing was not persisted.");
+        if (!string.Equals(stored.Title, b.Title, StringComparison.Ordinal) ||
+            !string.Equals(stored.Source, b.Source, StringComparison.Ordinal) ||
+            !string.Equals(stored.Url, b.Url, StringComparison.Ordinal) ||
+            !string.Equals(stored.Body, b.Body, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"Briefing {b.Id} is immutable; changed content needs a new ID.");
     }
 
     public void CreateSession(Session s)
@@ -404,6 +426,13 @@ public sealed class ConversationStore : IDisposable
     {
         if (participants.Count == 0) return Array.Empty<SessionId>();
 
+        // Never recall a conversation that ended after this encounter began.
+        // A missing current session is not a license to retrieve arbitrary history.
+        var current = GetSession(exclude);
+        if (current is null || !participants.ToHashSet().SetEquals(current.Participants) ||
+            participants.Count != current.Participants.Count)
+            return Array.Empty<SessionId>();
+
         var placeholders = string.Join(",", participants.Select((_, i) => $"@p{i}"));
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = $"""
@@ -411,12 +440,15 @@ public sealed class ConversationStore : IDisposable
             FROM sessions s
             JOIN session_participants sp ON sp.session_id = s.id
             WHERE s.status = 'Ended' AND s.id <> @exclude
+              AND s.ended_at IS NOT NULL AND s.ended_at <= @current_created
+              AND s.created_at <= @current_created
             GROUP BY s.id, s.created_at
             HAVING COUNT(*) = @count
                AND SUM(CASE WHEN sp.character_id IN ({placeholders}) THEN 1 ELSE 0 END) = @count
             ORDER BY s.created_at ASC;
             """;
         cmd.Parameters.AddWithValue("@exclude", exclude.ToString());
+        cmd.Parameters.AddWithValue("@current_created", Iso(current.CreatedAt));
         cmd.Parameters.AddWithValue("@count", participants.Count);
         for (var i = 0; i < participants.Count; i++)
             cmd.Parameters.AddWithValue($"@p{i}", participants[i].ToString());
