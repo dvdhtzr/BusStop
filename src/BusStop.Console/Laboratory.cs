@@ -2,6 +2,7 @@ using BusStop.Context;
 using BusStop.Domain;
 using BusStop.Engine;
 using BusStop.Models;
+using BusStop.Moderation;
 using BusStop.Persistence;
 
 namespace BusStop.Console;
@@ -107,7 +108,8 @@ public static class Laboratory
         SessionMode mode = SessionMode.FreshEncounter,
         string modelConfigVersion = "stub/stub-digest",
         Briefing? briefing = null,
-        string? contextVersion = null)
+        string? contextVersion = null,
+        ModerationSessionPolicy? moderationPolicy = null)
     {
         var story = briefing ?? Story;
         foreach (var c in Cast) store.SaveCharacter(c);
@@ -123,7 +125,7 @@ public static class Laboratory
             ContextVersion: contextVersion ?? ContextVersion,
             Status: SessionStatus.Active,
             CreatedAt: DateTimeOffset.UtcNow,
-            EndedAt: null));
+            EndedAt: null), moderationPolicy);
         return id;
     }
 

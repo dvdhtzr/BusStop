@@ -1,9 +1,11 @@
 ﻿using System.Text;
+using System.Text.Json;
 using BusStop.Console;
 using BusStop.Coordinator;
 using BusStop.Domain;
 using BusStop.Engine;
 using BusStop.Memory;
+using BusStop.Moderation;
 using BusStop.Models;
 using BusStop.Persistence;
 using BusStop.Sources;
@@ -65,6 +67,33 @@ var continuing = argv.Contains("--continuing");
 var freshBridge = argv.Contains("--fresh-bridge");
 var c2Attribution = argv.Contains("--c2-attribution");
 var discussDocument = argv.Contains("--discuss-document");
+var shadowMode = argv.Contains("--shadow-moderator");
+
+int PositiveOption(string name, int fallback, int maximum)
+{
+    var raw = Arg(name);
+    if (raw is null) return fallback;
+    if (!int.TryParse(raw, out var parsed) || parsed is < 1 || parsed > maximum)
+        throw new ArgumentException($"{name} must be an integer from 1 to {maximum}.");
+    return parsed;
+}
+
+var maxOpportunities = PositiveOption("--max-opportunities", 18, 1000);
+var maxModelCalls = PositiveOption("--max-model-calls", 36, 2000);
+var endAfterPasses = PositiveOption("--end-after-passes", 2, 100);
+var moderatorBudget = PositiveOption("--moderator-budget", 24, 1000);
+var moderatorSampleEvery = PositiveOption("--moderator-sample-every", 3, 1000);
+var moderatorTimeout = PositiveOption("--moderator-timeout", 180, 3600);
+
+if (!shadowMode && argv.Any(arg => arg.StartsWith("--moderator-", StringComparison.Ordinal)) ||
+    shadowMode && modelKind != "ollama")
+{
+    System.Console.Error.WriteLine(
+        "Shadow moderation requires --model ollama --shadow-moderator. " +
+        "Do not supply moderator options without --shadow-moderator.");
+    return 2;
+}
+
 var contextVersion = discussDocument
     ? EvidenceBriefingBuilder.ContextVersion
     : Laboratory.GetContextVersion(c2Attribution);
@@ -148,10 +177,10 @@ switch (modelKind)
 
 var engineOptions = modelKind == "ollama"
     ? new EngineOptions(
-        MaxOpportunities: 18,
-        MaxModelCalls: 36,
+        MaxOpportunities: maxOpportunities,
+        MaxModelCalls: maxModelCalls,
         MaxAttemptsPerOpportunity: 2,
-        Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: 2))
+        Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: endAfterPasses))
     : new EngineOptions();
 
 var runConfig = new RunConfig(
@@ -165,6 +194,27 @@ var runConfig = new RunConfig(
 Action<string>? trace = modelKind == "ollama"
     ? line => System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}")
     : null;
+
+OllamaAdapter? moderatorAdapter = null;
+ModerationSessionPolicy moderatorPolicy = ModerationSessionPolicy.Disabled;
+if (shadowMode)
+{
+    var moderatorModelName = Arg("--moderator-model") ?? Arg("--ollama-model") ?? "qwen3.5:9b";
+    var endpoint = Arg("--ollama-url") is { } moderatorUrl ? new Uri(moderatorUrl) : null;
+    moderatorAdapter = new OllamaAdapter(
+        moderatorModelName, endpoint, temperature: 0.1,
+        timeout: TimeSpan.FromSeconds(moderatorTimeout), think: false);
+    moderatorPolicy = new ModerationSessionPolicy(
+        ModerationSessionPolicy.CurrentContractVersion,
+        ModerationOperatingMode.Shadow, "shadow-rules-v1",
+        "shadow-m1-prompt-v1", moderatorAdapter.ModelName, moderatorAdapter.ModelDigest,
+        0.1, false, moderatorBudget, 0, 0, 0);
+    moderatorPolicy.Validate();
+    System.Console.WriteLine(
+        $"[Moderator] SHADOW ONLY: {moderatorAdapter.ModelName}, " +
+        $"budget {moderatorBudget} calls/session, periodic sample every " +
+        $"{moderatorSampleEvery} committed utterances.");
+}
 
 using var store = ConversationStore.OpenFile(dbPath);
 store.InitializeSchema();
@@ -194,13 +244,63 @@ foreach (var (mode, label, briefing) in plan)
     if (plan.Length > 1) System.Console.WriteLine($"\n==== {label} ====");
 
     var client = makeClient();
-    var session = Laboratory.Seed(store, mode, modelConfigVersion, briefing, contextVersion);
+    var session = Laboratory.Seed(
+        store, mode, modelConfigVersion, briefing, contextVersion, moderatorPolicy);
     if (documentSnapshot is not null)
         store.PinSessionEvidence(session, documentSnapshot.SnapshotId, documentPassages!);
-    var result = new ConversationEngine(
-        store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
-        Laboratory.Cast, briefing, engineOptions, trace: trace,
-        recollections: mode == SessionMode.Continuing ? recollectionService : null).Run();
+    ShadowModerationWorker? shadowWorker = null;
+    if (moderatorAdapter is not null)
+    {
+        shadowWorker = new ShadowModerationWorker(
+            dbPath, session, moderatorPolicy, moderatorAdapter,
+            Laboratory.Cast, briefing,
+            store.GetSessionEvidence(session)?.ExposedPassageIds,
+            sampleEvery: moderatorSampleEvery,
+            log: line => System.Console.WriteLine(
+                $"[{DateTime.Now:HH:mm:ss}] {line}"));
+    }
+
+    RunResult result;
+    try
+    {
+        result = new ConversationEngine(
+            store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
+            Laboratory.Cast, briefing, engineOptions, trace: trace,
+            recollections: mode == SessionMode.Continuing ? recollectionService : null,
+            shadowSink: shadowWorker).Run();
+    }
+    finally
+    {
+        // Wait only AFTER authoritative conversation processing stops.
+        // Never wait for a shadow review between two participant turns.
+        shadowWorker?.DrainAsync().GetAwaiter().GetResult();
+    }
+
+    if (shadowWorker is not null)
+    {
+        var reviews = store.GetShadowReviews(session);
+        var shadowReportPath = Path.Combine(outDir, $"shadow-{session}.json");
+        File.WriteAllText(shadowReportPath, JsonSerializer.Serialize(new
+        {
+            session = session.ToString(),
+            mode = "Shadow",
+            moderatorPolicy,
+            summary = new
+            {
+                selected = shadowWorker.Selected,
+                notSelected = shadowWorker.NotSelected,
+                dropped = shadowWorker.Dropped,
+                audited = shadowWorker.Written,
+                workerErrors = shadowWorker.Errors
+            },
+            reviews,
+            reservations = store.GetModeratorReservations(session)
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        System.Console.WriteLine(
+            $"[Moderator] Shadow complete: {shadowWorker.Written} audits, " +
+            $"{shadowWorker.NotSelected} not selected, {shadowWorker.Dropped} dropped, " +
+            $"{shadowWorker.Errors} errors. Private audit: {shadowReportPath}");
+    }
 
     var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
     var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest, runConfig);
@@ -223,6 +323,7 @@ foreach (var (mode, label, briefing) in plan)
     runSections.AppendLine();
 }
 
+moderatorAdapter?.Dispose();
 ollamaAdapter?.Dispose();
 
 // Single run: keep transcript.md / diagnostics.json for the usual single-run flow.
