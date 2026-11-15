@@ -176,6 +176,13 @@ targets. Record exact utterances to answer:
 6. Do the participants end when the topic feels finished, or
    merely because of coordinator thresholds/budgets?
 
+**Additional human check:** In a second reading, hide the speaker
+labels and explicit addressee annotations for short, shuffled excerpts.
+Assess whether a reader can attribute a line to Arthur, Maya, or Daniel
+**without** relying on the familiar factory/father/classroom backstory.
+Because this report's reviewer already knows the cast, a different
+reader is preferable for a genuinely blind attribution judgment.
+
 **Important limitation:** This is a descriptive follow-up, **not**
 a memory causal test, because the current CLI does not provide a
 matched fresh bridge-only control. Do not claim memory caused a
