@@ -9,6 +9,13 @@ transcript that reads like three distinct individuals having an unscripted
 conversation, evaluated separately for conversational quality and for technical
 integrity.
 
+**Intended product:** Let the user start a conversation from either a randomly
+selected story from **today's news** or an uploaded document understood through
+**local RAG retrieval**. The current plant and bridge stories are *fictional,
+frozen test fixtures*, not real news. Source ingestion is future work, separate
+from the ongoing conversation-quality experiments. See
+[conversation source vision](docs/conversation-source-vision.md).
+
 ## Status
 
 **Phase 1 — Minimal Conversation Engine.** The smallest engine that can run a real
