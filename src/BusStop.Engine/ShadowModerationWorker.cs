@@ -264,19 +264,19 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
         sb.AppendLine();
         sb.AppendLine("Return ONE JSON object with the exact candidateId above.");
         sb.AppendLine("When you find nothing material, return precisely this shape:");
-        sb.AppendLine("{\\"contractVersion\\":\\"shadow-m1-v1\\",\\"candidateId\\":\\"" + c.CandidateId.ToString("D") + "\\",");
-        sb.AppendLine("\\"disposition\\":\\"Accept\\",\\"severity\\":\\"None\\",\\"finding\\":null}");
+        sb.AppendLine("{\"contractVersion\":\"shadow-m1-v1\",\"candidateId\":\"" + c.CandidateId.ToString("D") + "\",");
+        sb.AppendLine("\"disposition\":\"Accept\",\"severity\":\"None\",\"finding\":null}");
         sb.AppendLine("When a real issue exists, use the same top-level fields, but set");
         sb.AppendLine("disposition to Advisory, RequestRevision, or Abstain;");
         sb.AppendLine("severity to Low, Medium, or High; and finding to an object with:");
-        sb.AppendLine("\\"kind\\": one of UnestablishedAutobiography, MisattributedExperience,");
+        sb.AppendLine("\"kind\": one of UnestablishedAutobiography, MisattributedExperience,");
         sb.AppendLine("UnsupportedFactualClaim, ContradictedFactualClaim, ExactDuplicate,");
         sb.AppendLine("SemanticRepetition, Other;");
-        sb.AppendLine("\\"claimSpan\\": an EXACT substring of proposed text;");
-        sb.AppendLine("\\"explanation\\": a short specific reason;");
-        sb.AppendLine("\\"evidenceReferences\\": an array of authorized reference IDs;");
-        sb.AppendLine("\\"uncertain\\": true or false;");
-        sb.AppendLine("\\"narrowFeedback\\": a narrow suggestion string or null.");
+        sb.AppendLine("\"claimSpan\": an EXACT substring of proposed text;");
+        sb.AppendLine("\"explanation\": a short specific reason;");
+        sb.AppendLine("\"evidenceReferences\": an array of authorized reference IDs;");
+        sb.AppendLine("\"uncertain\": true or false;");
+        sb.AppendLine("\"narrowFeedback\": a narrow suggestion string or null.");
         sb.AppendLine("Never write replacement speech. Output JSON only.");
         return (sb.ToString(), refs.Distinct(StringComparer.Ordinal).ToArray());
     }
