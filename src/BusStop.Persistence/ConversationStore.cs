@@ -323,6 +323,16 @@ public sealed class ConversationStore : IDisposable
         return new CharacterProfile(id, version, r.GetString(0), r.GetString(1), traits);
     }
 
+    public Briefing? GetBriefing(BriefingId id)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "SELECT title, source, url, body FROM briefings WHERE id = @id;";
+        cmd.Parameters.AddWithValue("@id", id.ToString());
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return null;
+        return new Briefing(id, r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3));
+    }
+
     public Session? GetSession(SessionId id)
     {
         List<CharacterId> participants = new();

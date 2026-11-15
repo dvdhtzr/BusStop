@@ -96,10 +96,12 @@ var recollectionService = new RecollectionService(store);
 var plan = continuing
     ? new[]
       {
-          (Mode: SessionMode.FreshEncounter, Label: "Prior conversation"),
-          (Mode: SessionMode.Continuing, Label: "Continuing conversation")
+          (Mode: SessionMode.FreshEncounter, Label: "Prior conversation", Briefing: Laboratory.Story),
+          (Mode: SessionMode.Continuing, Label: "Continuing conversation", Briefing: Laboratory.SecondStory)
       }
-    : Enumerable.Range(1, runs).Select(i => (Mode: SessionMode.FreshEncounter, Label: $"Run {i}")).ToArray();
+    : Enumerable.Range(1, runs)
+        .Select(i => (Mode: SessionMode.FreshEncounter, Label: $"Run {i}", Briefing: Laboratory.Story))
+        .ToArray();
 
 var runSections = new StringBuilder();
 var summary = new StringBuilder();
@@ -109,15 +111,15 @@ summary.AppendLine("| --- | --- | --- | --- |");
 string lastTranscript = string.Empty;
 string lastDiagnostics = string.Empty;
 
-foreach (var (mode, label) in plan)
+foreach (var (mode, label, briefing) in plan)
 {
     if (plan.Length > 1) System.Console.WriteLine($"\n==== {label} ====");
 
     var client = makeClient();
-    var session = Laboratory.Seed(store, mode, modelConfigVersion);
+    var session = Laboratory.Seed(store, mode, modelConfigVersion, briefing);
     var result = new ConversationEngine(
         store, client, new BusStop.Context.ParticipantContextBuilder(), session,
-        Laboratory.Cast, Laboratory.Story, engineOptions, trace: trace,
+        Laboratory.Cast, briefing, engineOptions, trace: trace,
         recollections: mode == SessionMode.Continuing ? recollectionService : null).Run();
 
     var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
