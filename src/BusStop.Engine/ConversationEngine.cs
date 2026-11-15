@@ -76,6 +76,8 @@ public sealed class ConversationEngine
         _profiles = participants.ToDictionary(p => p.Id);
 
         _coordinator = RebuildCoordinator(out _opportunityOrdinal);
+        // Total inference budget is a property of the durable session, not this process.
+        _modelCalls = _store.GetAttempts(_session).Count;
     }
 
     /// <summary>Rebuilds coordinator state by replaying the session's recorded opportunities in order.
@@ -86,10 +88,17 @@ public sealed class ConversationEngine
         var coordinator = new FloorCoordinator(_handles.Select(h => h.Id).ToList(), _options.Coordinator);
         var recorded = _store.GetRecordedOpportunities(_session);
 
+        var expectedOrdinal = 0;
         foreach (var rec in recorded)
         {
-            // Advancing the coordinator keeps its internal ordering aligned with what was recorded.
-            _ = coordinator.Next();
+            // Refuse incompatible/corrupt replay rather than silently rewriting history
+            // under a different speaker or scheduling policy.
+            var next = coordinator.Next();
+            if (rec.Ordinal != expectedOrdinal || next is not Offer expected ||
+                expected.Participant != rec.Participant || expected.Reason != rec.Reason)
+                throw new InvalidOperationException(
+                    $"Incompatible recorded opportunity at ordinal {rec.Ordinal}: replay refused.");
+            expectedOrdinal++;
             switch (rec.Outcome)
             {
                 case ReplayOutcome.Spoke:
@@ -169,6 +178,10 @@ public sealed class ConversationEngine
 
         for (var i = 0; i < _options.MaxAttemptsPerOpportunity; i++)
         {
+            // The remaining budget is checked on EVERY attempt, not just each turn.
+            if (_modelCalls >= _options.MaxModelCalls)
+                break;
+
             var response = _model.Decide(new ModelRequest(offer.Participant, built.Prompt), cancellationToken);
             _modelCalls++;
             decision = DecisionValidator.Validate(response, validationContext);
