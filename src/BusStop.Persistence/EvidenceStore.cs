@@ -170,6 +170,17 @@ public sealed partial class ConversationStore
     /// opportunity. A session may not silently switch sources during playback.</summary>
     public void PinSessionEvidence(
         SessionId sessionId, string snapshotId, IReadOnlyList<string> exposedPassageIds)
+        => PinSessionEvidenceCore(sessionId, snapshotId, exposedPassageIds, dynamicRetrieval: false);
+
+    /// <summary>R1c pins a source but exposes no static passages. Evidence is
+    /// selected and recorded per speaking opportunity before model inference.</summary>
+    public void PinSessionEvidenceForRetrieval(SessionId sessionId, string snapshotId)
+        => PinSessionEvidenceCore(sessionId, snapshotId, Array.Empty<string>(),
+            dynamicRetrieval: true);
+
+    private void PinSessionEvidenceCore(
+        SessionId sessionId, string snapshotId, IReadOnlyList<string> exposedPassageIds,
+        bool dynamicRetrieval)
     {
         ArgumentNullException.ThrowIfNull(exposedPassageIds);
         var session = GetSession(sessionId)
@@ -184,10 +195,14 @@ public sealed partial class ConversationStore
             throw new InvalidOperationException("Evidence must be pinned before the first turn.");
         if (briefing.Url != $"local-evidence:{snapshotId}")
             throw new InvalidOperationException("Session briefing does not identify the pinned snapshot.");
-        if (exposedPassageIds.Count == 0 ||
+        if (dynamicRetrieval !=
+            (session.ContextVersion == EvidenceContextVersions.DynamicLexicalRetrieval))
+            throw new InvalidOperationException("Source retrieval mode and persisted context version disagree.");
+        if ((!dynamicRetrieval && exposedPassageIds.Count == 0) ||
+            (dynamicRetrieval && exposedPassageIds.Count != 0) ||
             exposedPassageIds.Distinct(StringComparer.Ordinal).Count() != exposedPassageIds.Count ||
             exposedPassageIds.Any(id => !snapshot.Passages.Any(p => p.PassageId == id)))
-            throw new InvalidOperationException("Only unique passages from the pinned source may be exposed.");
+            throw new InvalidOperationException("Only unique, authorized passages may be statically exposed.");
 
         var ids = exposedPassageIds.ToArray();
         using (var cmd = _connection.CreateCommand())
