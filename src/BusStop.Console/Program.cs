@@ -17,6 +17,7 @@ using BusStop.Sources;
 //       [--ollama-url <url>] [--no-think] [--ollama-timeout <seconds>] [--runs <n>] [--db <path>] [--out <dir>]
 //       [--continuing | --fresh-bridge] [--c2-attribution]
 //   dotnet run --project src/BusStop.Console -- --inspect-document <file.txt|file.md>
+//   dotnet run --project src/BusStop.Console -- --discuss-document <file.txt|file.md> --model ollama ...
 
 var argv = Environment.GetCommandLineArgs().Skip(1).ToArray();
 string? Arg(string name)
@@ -31,7 +32,7 @@ if (argv.Contains("--inspect-document"))
 {
     if (string.IsNullOrWhiteSpace(Arg("--inspect-document")) ||
         argv.Any(x => x is "--model" or "--continuing" or "--fresh-bridge" or
-            "--c2-attribution" or "--runs" or "--db" or "--out"))
+            "--c2-attribution" or "--runs" or "--db" or "--out" or "--discuss-document"))
     {
         System.Console.Error.WriteLine(
             "Usage: --inspect-document <file.txt|file.md> (no conversation flags).");
@@ -63,7 +64,42 @@ var runs = int.TryParse(Arg("--runs"), out var r) && r > 0 ? r : 1;
 var continuing = argv.Contains("--continuing");
 var freshBridge = argv.Contains("--fresh-bridge");
 var c2Attribution = argv.Contains("--c2-attribution");
-var contextVersion = Laboratory.GetContextVersion(c2Attribution);
+var discussDocument = argv.Contains("--discuss-document");
+var contextVersion = discussDocument
+    ? EvidenceBriefingBuilder.ContextVersion
+    : Laboratory.GetContextVersion(c2Attribution);
+
+if (discussDocument &&
+    (string.IsNullOrWhiteSpace(Arg("--discuss-document")) ||
+     modelKind != "ollama" || continuing || freshBridge || c2Attribution || runs != 1))
+{
+    System.Console.Error.WriteLine(
+        "--discuss-document requires --model ollama and a single fresh session; " +
+        "it cannot be combined with --continuing, --fresh-bridge or --c2-attribution.");
+    return 2;
+}
+
+EvidenceSnapshot? documentSnapshot = null;
+Briefing? documentBriefing = null;
+IReadOnlyList<string>? documentPassages = null;
+if (discussDocument)
+{
+    try
+    {
+        documentSnapshot = new LocalTextDocumentImporter().Import(Arg("--discuss-document")!);
+        (documentBriefing, documentPassages) = EvidenceBriefingBuilder.Build(documentSnapshot);
+        System.Console.WriteLine(
+            $"Document '{documentSnapshot.Descriptor.Title}': showing " +
+            $"{documentPassages.Count} of {documentSnapshot.Passages.Count} passages. " +
+            "No on-demand retrieval (RAG) in R1b.");
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+        NotSupportedException or ArgumentException or InvalidOperationException)
+    {
+        System.Console.Error.WriteLine($"Document ingestion failed: {ex.Message}");
+        return 2;
+    }
+}
 if (continuing && freshBridge)
 {
     System.Console.Error.WriteLine("--fresh-bridge is a fresh-session control and cannot be combined with --continuing.");
@@ -137,7 +173,11 @@ store.InitializeSchema();
 // recollection context. The established --continuing pair and default factory runs
 // retain their original behavior.
 var recollectionService = new RecollectionService(store);
-var plan = Laboratory.BuildRunPlan(runs, continuing, freshBridge);
+if (documentSnapshot is not null)
+    store.SaveEvidenceSnapshot(documentSnapshot);
+var plan = discussDocument
+    ? new[] { (Mode: SessionMode.FreshEncounter, Label: "Document discussion", Briefing: documentBriefing!) }
+    : Laboratory.BuildRunPlan(runs, continuing, freshBridge);
 
 var runSections = new StringBuilder();
 var summary = new StringBuilder();
@@ -155,6 +195,8 @@ foreach (var (mode, label, briefing) in plan)
 
     var client = makeClient();
     var session = Laboratory.Seed(store, mode, modelConfigVersion, briefing, contextVersion);
+    if (documentSnapshot is not null)
+        store.PinSessionEvidence(session, documentSnapshot.SnapshotId, documentPassages!);
     var result = new ConversationEngine(
         store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
         Laboratory.Cast, briefing, engineOptions, trace: trace,

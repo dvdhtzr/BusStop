@@ -22,6 +22,13 @@ public static class TranscriptRenderer
         sb.AppendLine();
         sb.AppendLine($"**Story:** {briefing?.Title} — {briefing?.Source}  ");
         sb.AppendLine($"**Source:** {briefing?.Url}  ");
+        var evidence = store.GetSessionEvidence(session);
+        if (evidence is not null)
+        {
+            sb.AppendLine($"**Evidence snapshot:** {evidence.SnapshotId}  ");
+            sb.AppendLine($"**Visible source passages:** {string.Join(", ", evidence.ExposedPassageIds)}  ");
+            sb.AppendLine("_The document discussion used only the listed passages; no live RAG retrieval was available._");
+        }
         sb.AppendLine($"**Participants:** {string.Join(", ", cast.Select(c => c.Name))}");
         sb.AppendLine();
         sb.AppendLine("---");
@@ -53,6 +60,7 @@ public static class TranscriptRenderer
         var sessionRecord = store.GetSession(session);
         var committed = store.GetCommittedUtterances(session);
         var attempts = store.GetAttempts(session);
+        var evidence = store.GetSessionEvidence(session);
 
         var outcomeCounts = attempts
             .GroupBy(a => a.Outcome)
@@ -70,6 +78,13 @@ public static class TranscriptRenderer
             committedUtterances = committed.Count,
             sequenceContiguous = contiguous,
             outcomes = outcomeCounts,
+            sourceEvidence = evidence is null ? null : new
+            {
+                snapshotId = evidence.SnapshotId,
+                briefingId = evidence.Briefing.ToString(),
+                exposedPassageIds = evidence.ExposedPassageIds.ToArray(),
+                fullDocumentRetrieval = false
+            },
             config = new
             {
                 model = modelName,

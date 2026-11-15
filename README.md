@@ -12,8 +12,9 @@ integrity.
 **Intended product:** Let the user start a conversation from either a randomly
 selected story from **today's news** or an uploaded document understood through
 **local RAG retrieval**. The current plant and bridge stories are *fictional,
-frozen test fixtures*, not real news. Source ingestion is future work, separate
-from the ongoing conversation-quality experiments. See
+frozen test fixtures*, not real news. R1a captures local source evidence; R1b
+introduces bounded document discussions. Actual on-demand RAG and live
+news selection remain future work. See
 [conversation source vision](docs/conversation-source-vision.md).
 
 ## Status
@@ -59,6 +60,21 @@ document-grounded conversation or perform RAG retrieval. See
 [the R1a design and test boundary](docs/real-content/r1a-evidence-snapshots.md).
 The existing conversation engine, prompts, and fictional lab scenarios
 remain unchanged.
+
+### R1b: Discuss a local document with Ollama
+
+```powershell
+dotnet run --project .\src\BusStop.Console --configuration Release -- `
+    --model ollama --ollama-model qwen3.5:9b --no-think `
+    --discuss-document "C:\path\to\notes.md" --out "C:\path\to\result"
+```
+
+This gives Arthur, Maya and Daniel **only the first four citable
+passages** of that file. It stores the full snapshot in local SQLite
+and pins the exposed passages to the conversation; the transcript and
+diagnostics identify what was visible. **It does not retrieve further
+passages or perform RAG.** See
+[the R1b acceptance boundary](docs/real-content/r1b-document-discussion.md).
 
 ## Building
 
