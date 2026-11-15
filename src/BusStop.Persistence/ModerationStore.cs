@@ -113,8 +113,12 @@ public sealed partial class ConversationStore
         var policy = GetModerationPolicy(session);
         if (policy.Mode == ModerationOperatingMode.Disabled)
             throw new InvalidOperationException("Moderator inference is disabled.");
-        if (GetSession(session)?.Status != SessionStatus.Active)
-            throw new InvalidOperationException("Moderator inference requires an active session.");
+        // Shadow may finish draining AFTER the authoritative host has ended.
+        // It cannot affect ended sessions, and it still spends its pinned budget.
+        var sessionStatus = GetSession(session)?.Status;
+        if (sessionStatus != SessionStatus.Active &&
+            !(policy.Mode == ModerationOperatingMode.Shadow && sessionStatus == SessionStatus.Ended))
+            throw new InvalidOperationException("Moderator inference requires an active session or shadow drain.");
         if (opportunity is { } opp && !GetRecordedOpportunities(session).Any(o => o.Id == opp))
             throw new InvalidOperationException("Moderator inference references an unknown speaking opportunity.");
 

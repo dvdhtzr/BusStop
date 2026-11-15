@@ -66,6 +66,29 @@ internal static class Schema
             reserved_at      TEXT NOT NULL
         );
 
+        -- This is a PRIVATE observational ledger. It is never used to build
+        -- participant prompts, recollections or the public conversation transcript.
+        CREATE TABLE IF NOT EXISTS shadow_moderation_reviews (
+            candidate_id        TEXT PRIMARY KEY,
+            session_id          TEXT NOT NULL REFERENCES sessions(id),
+            opportunity_id      TEXT NOT NULL UNIQUE REFERENCES speaking_opportunities(id),
+            utterance_id        TEXT NOT NULL REFERENCES utterances(id),
+            speaker_id          TEXT NOT NULL,
+            committed_boundary  INTEGER NOT NULL,
+            candidate_text      TEXT NOT NULL,
+            trigger_kind        TEXT NOT NULL,
+            authorized_refs     TEXT NOT NULL,
+            model_name          TEXT NOT NULL,
+            model_digest        TEXT NOT NULL,
+            request_id          TEXT NULL REFERENCES moderator_inference_reservations(request_id),
+            review_status       TEXT NOT NULL,
+            judgment_json       TEXT NULL,
+            severity            TEXT NOT NULL,
+            raw_response        TEXT NULL,
+            failure_detail      TEXT NULL,
+            recorded_at         TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS session_participants (
             session_id   TEXT NOT NULL,
             ordinal      INTEGER NOT NULL,
