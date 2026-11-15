@@ -17,7 +17,14 @@ public static class RunArtifactWriter
 
         // Never overwrite earlier experiment evidence. A failed second write is
         // visible instead of silently destroying an existing artifact.
-        File.WriteAllText(transcriptPath, transcript);
-        File.WriteAllText(diagnosticsPath, diagnostics);
+        WriteNew(transcriptPath, transcript);
+        WriteNew(diagnosticsPath, diagnostics);
+    }
+
+    private static void WriteNew(string path, string content)
+    {
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        using var writer = new StreamWriter(stream);
+        writer.Write(content);
     }
 }
