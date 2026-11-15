@@ -14,7 +14,7 @@ using BusStop.Persistence;
 // Usage:
 //   dotnet run --project src/BusStop.Console -- [--model stub|ollama] [--ollama-model <name>]
 //       [--ollama-url <url>] [--no-think] [--ollama-timeout <seconds>] [--runs <n>] [--db <path>] [--out <dir>]
-//       [--continuing | --fresh-bridge]
+//       [--continuing | --fresh-bridge] [--c2-attribution]
 
 var argv = Environment.GetCommandLineArgs().Skip(1).ToArray();
 string? Arg(string name)
@@ -27,6 +27,8 @@ var modelKind = Arg("--model") ?? "stub";
 var runs = int.TryParse(Arg("--runs"), out var r) && r > 0 ? r : 1;
 var continuing = argv.Contains("--continuing");
 var freshBridge = argv.Contains("--fresh-bridge");
+var c2Attribution = argv.Contains("--c2-attribution");
+var contextVersion = Laboratory.GetContextVersion(c2Attribution);
 if (continuing && freshBridge)
 {
     System.Console.Error.WriteLine("--fresh-bridge is a fresh-session control and cannot be combined with --continuing.");
@@ -117,9 +119,9 @@ foreach (var (mode, label, briefing) in plan)
     if (plan.Length > 1) System.Console.WriteLine($"\n==== {label} ====");
 
     var client = makeClient();
-    var session = Laboratory.Seed(store, mode, modelConfigVersion, briefing);
+    var session = Laboratory.Seed(store, mode, modelConfigVersion, briefing, contextVersion);
     var result = new ConversationEngine(
-        store, client, new BusStop.Context.ParticipantContextBuilder(), session,
+        store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
         Laboratory.Cast, briefing, engineOptions, trace: trace,
         recollections: mode == SessionMode.Continuing ? recollectionService : null).Run();
 
@@ -155,7 +157,7 @@ var batch = new StringBuilder();
 batch.AppendLine($"# BusStop batch — {plan.Length} session(s)");
 batch.AppendLine();
 batch.AppendLine($"**Model:** {(ollamaAdapter is null ? modelConfigVersion : ollamaAdapter.ModelName)}  ");
-batch.AppendLine($"**Protocol:** {Laboratory.ProtocolVersion} · {Laboratory.ContextVersion}  ");
+batch.AppendLine($"**Protocol:** {Laboratory.ProtocolVersion} · {contextVersion}  ");
 batch.AppendLine($"**Generated:** {DateTime.Now:yyyy-MM-dd HH:mm}");
 batch.AppendLine();
 batch.AppendLine("## Summary");
