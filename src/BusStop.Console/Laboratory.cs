@@ -62,6 +62,29 @@ public static class Laboratory
         "longer safe; some residents worry the detour will hurt downtown shops and lengthen the commute " +
         "for people on the east side.");
 
+    /// <summary>Builds the laboratory session plan without changing the engine. The C1b
+    /// bridge-only control uses the same frozen bridge story as continuing sessions,
+    /// but starts fresh and therefore receives no prior-session recollections.</summary>
+    public static (SessionMode Mode, string Label, Briefing Briefing)[] BuildRunPlan(
+        int runs, bool continuing = false, bool freshBridge = false)
+    {
+        if (runs < 1) throw new ArgumentOutOfRangeException(nameof(runs));
+        if (continuing && freshBridge)
+            throw new ArgumentException("--fresh-bridge cannot be combined with --continuing.");
+
+        if (continuing)
+            return new[]
+            {
+                (Mode: SessionMode.FreshEncounter, Label: "Prior conversation", Briefing: Story),
+                (Mode: SessionMode.Continuing, Label: "Continuing conversation", Briefing: SecondStory)
+            };
+
+        var briefing = freshBridge ? SecondStory : Story;
+        return Enumerable.Range(1, runs)
+            .Select(i => (Mode: SessionMode.FreshEncounter, Label: $"Run {i}", Briefing: briefing))
+            .ToArray();
+    }
+
     public static SessionId Seed(
         ConversationStore store,
         SessionMode mode = SessionMode.FreshEncounter,
