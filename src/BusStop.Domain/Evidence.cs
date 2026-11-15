@@ -43,3 +43,11 @@ public sealed record EvidenceSnapshot(
     DateTimeOffset CapturedAt,
     string SnapshotText,
     IReadOnlyList<EvidencePassage> Passages);
+
+
+/// <summary>Source-context versions are pinned to persisted sessions to
+/// prevent silently replaying an old conversation under new retrieval rules.</summary>
+public static class EvidenceContextVersions
+{
+    public const string DynamicLexicalRetrieval = "ctx-3-ending+doc-rag-lexical-v1";
+}
