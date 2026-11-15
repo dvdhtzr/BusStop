@@ -38,6 +38,23 @@ public static class Laboratory
     public const string ProtocolVersion = "floor-2";
     public const string ContextVersion = "ctx-3-ending";
 
+    // C2 is a strictly opt-in addition to conversational guidance. The default
+    // builder still uses exactly the historical, pinned ctx-3-ending prompt.
+    public const string C2ContextVersion = "ctx-3-ending+c2-attribution-v1";
+    public const string C2AttributionGuidance =
+        "You may draw on your own personal experiences naturally. When saying what another person " +
+        "previously told you or lived through, rely only on what they have actually shared in this " +
+        "conversation or in your recollections. If you do not know, ask instead of inventing shared history.";
+
+    public static string GetContextVersion(bool c2Attribution) =>
+        c2Attribution ? C2ContextVersion : ContextVersion;
+
+    public static ParticipantContextBuilder BuildContextBuilder(bool c2Attribution) =>
+        c2Attribution
+            ? new ParticipantContextBuilder(
+                competence: ParticipantContextBuilder.DefaultCompetence + " " + C2AttributionGuidance)
+            : new ParticipantContextBuilder();
+
     public static readonly Briefing Story = new(
         new BriefingId(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")),
         "Shuttered auto-parts plant to reopen under new owner",
@@ -89,7 +106,8 @@ public static class Laboratory
         ConversationStore store,
         SessionMode mode = SessionMode.FreshEncounter,
         string modelConfigVersion = "stub/stub-digest",
-        Briefing? briefing = null)
+        Briefing? briefing = null,
+        string? contextVersion = null)
     {
         var story = briefing ?? Story;
         foreach (var c in Cast) store.SaveCharacter(c);
@@ -102,7 +120,7 @@ public static class Laboratory
             story.Id,
             ProtocolVersion: ProtocolVersion,
             ModelConfigVersion: modelConfigVersion,
-            ContextVersion: ContextVersion,
+            ContextVersion: contextVersion ?? ContextVersion,
             Status: SessionStatus.Active,
             CreatedAt: DateTimeOffset.UtcNow,
             EndedAt: null));
