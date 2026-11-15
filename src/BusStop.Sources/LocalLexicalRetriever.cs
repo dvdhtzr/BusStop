@@ -15,13 +15,16 @@ public static partial class LocalLexicalRetriever
 
     private static readonly HashSet<string> Stopwords = new(StringComparer.Ordinal)
     {
-        "about", "after", "again", "also", "been", "before", "being",
-        "between", "could", "does", "from", "have", "here", "into",
-        "just", "more", "most", "only", "other", "over", "said",
-        "same", "some", "such", "than", "that", "their", "them",
-        "then", "there", "these", "they", "this", "those", "through",
-        "very", "were", "what", "when", "where", "which", "while",
-        "will", "with", "would", "your", "should", "right", "really"
+        "about", "after", "again", "all", "also", "and", "are",
+        "been", "before", "being", "between", "but", "can", "could",
+        "did", "does", "for", "from", "had", "has", "have", "here",
+        "his", "her", "how", "into", "its", "just", "more", "most",
+        "not", "now", "our", "only", "other", "out", "over", "said",
+        "same", "she", "some", "such", "than", "that", "the", "their",
+        "them", "then", "there", "these", "they", "this", "those",
+        "through", "too", "very", "was", "were", "what", "when",
+        "where", "which", "while", "who", "why", "will", "with",
+        "would", "you", "your", "should", "right", "really"
     };
 
     public static LocalRetrievalResult Retrieve(
