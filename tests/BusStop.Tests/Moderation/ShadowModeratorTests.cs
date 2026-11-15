@@ -25,6 +25,15 @@ public sealed class ShadowModeratorTests : IDisposable
 
     private sealed class EchoModerator : IModelClient
     {
+        private readonly bool _requestRevision;
+        private readonly bool _malformed;
+
+        public EchoModerator(bool requestRevision = false, bool malformed = false)
+        {
+            _requestRevision = requestRevision;
+            _malformed = malformed;
+        }
+
         public string ModelName => "local-moderator";
         public string ModelDigest => "local-digest";
         public int Calls { get; private set; }
@@ -35,10 +44,37 @@ public sealed class ShadowModeratorTests : IDisposable
                 @"Candidate ID: (?<id>[a-f0-9-]{36})", RegexOptions.IgnoreCase);
             if (!match.Success)
                 throw new InvalidOperationException("Candidate ID was not sent to moderator.");
+            if (_malformed)
+                return ModelResponse.Responded("{this is not JSON");
+
+            var id = match.Groups["id"].Value;
+            if (_requestRevision)
+            {
+                var matchRef = Regex.Match(request.Prompt, @"\[(?<ref>bio:[^\]]+)\]");
+                if (!matchRef.Success)
+                    throw new InvalidOperationException("Moderator must see the speaker biography reference.");
+                return ModelResponse.Responded(JsonSerializer.Serialize(new
+                {
+                    contractVersion = ShadowResponseParser.ContractVersion,
+                    candidateId = id,
+                    disposition = "RequestRevision",
+                    severity = "High",
+                    finding = new
+                    {
+                        kind = "UnestablishedAutobiography",
+                        claimSpan = "My father worked for the FAA.",
+                        explanation = "This is not in the speaker's established biography.",
+                        evidenceReferences = new[] { matchRef.Groups["ref"].Value },
+                        uncertain = false,
+                        narrowFeedback = "Remove the invented family connection but retain your opinion."
+                    }
+                }));
+            }
+
             return ModelResponse.Responded(JsonSerializer.Serialize(new
             {
                 contractVersion = ShadowResponseParser.ContractVersion,
-                candidateId = match.Groups["id"].Value,
+                candidateId = id,
                 disposition = "Accept",
                 severity = "None",
                 finding = (object?)null
@@ -213,6 +249,57 @@ public sealed class ShadowModeratorTests : IDisposable
         Assert.Equal(1, model.Calls);
         Assert.Contains(store.GetShadowReviews(session),
             r => r.Status == ShadowReviewStatus.BudgetExhausted);
+    }
+
+    [Fact]
+    public async Task Shadow_revision_request_is_recorded_but_original_speech_remains_committed()
+    {
+        using var store = Open();
+        var (session, cast) = Seed(store, Policy());
+        var observer = new ShadowModerationWorker(
+            _path, session, store.GetModerationPolicy(session),
+            new EchoModerator(requestRevision: true), cast, _briefing,
+            sampleEvery: 1, queueCapacity: 4);
+        var result = new ConversationEngine(
+            store, new StubModelClient(new[]
+            {
+                StubResponses.Speak("My father worked for the FAA.")
+            }), new ParticipantContextBuilder(), session, cast, _briefing,
+            new EngineOptions(MaxOpportunities: 1), shadowSink: observer).Run();
+        await observer.DrainAsync();
+
+        Assert.Equal(TerminationReason.BudgetReached, result.Reason);
+        Assert.Equal("My father worked for the FAA.",
+            Assert.Single(store.GetCommittedUtterances(session)).Text);
+        var review = Assert.Single(store.GetShadowReviews(session));
+        Assert.Equal(ShadowReviewStatus.Reviewed, review.Status);
+        Assert.Equal(ModerationDisposition.RequestRevision, review.Judgment!.Disposition);
+        Assert.Equal(ModeratorSeverity.High, review.Severity);
+        Assert.Single(store.GetAttempts(session)); // no hidden corrective participant call
+    }
+
+    [Fact]
+    public async Task Malformed_moderator_output_is_private_audit_failure_not_character_failure()
+    {
+        using var store = Open();
+        var (session, cast) = Seed(store, Policy());
+        var observer = new ShadowModerationWorker(
+            _path, session, store.GetModerationPolicy(session),
+            new EchoModerator(malformed: true), cast, _briefing,
+            sampleEvery: 1, queueCapacity: 4);
+        new ConversationEngine(
+            store, new StubModelClient(new[]
+            {
+                StubResponses.Speak("My father worked for the FAA.")
+            }), new ParticipantContextBuilder(), session, cast, _briefing,
+            new EngineOptions(MaxOpportunities: 1), shadowSink: observer).Run();
+        await observer.DrainAsync();
+
+        Assert.Single(store.GetCommittedUtterances(session));
+        Assert.Equal(ShadowReviewStatus.InvalidResponse,
+            Assert.Single(store.GetShadowReviews(session)).Status);
+        Assert.Equal(ModerationAttemptStatus.Completed,
+            Assert.Single(store.GetModeratorReservations(session)).Status);
     }
 
     [Fact]
