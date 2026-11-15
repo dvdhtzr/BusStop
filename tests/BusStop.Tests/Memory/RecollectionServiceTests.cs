@@ -36,6 +36,16 @@ public sealed class RecollectionServiceTests : IDisposable
         return id;
     }
 
+    private static SessionId SeedCurrent(ConversationStore store, params CharacterId[] participants)
+    {
+        var briefing = new Briefing(BriefingId.New(), "current", "wire", "url", "body");
+        store.SaveBriefing(briefing);
+        var id = SessionId.New();
+        store.CreateSession(new Session(id, participants, SessionMode.Continuing,
+            briefing.Id, "p", "m", "c", SessionStatus.Active, DateTimeOffset.UtcNow, null));
+        return id;
+    }
+
     [Fact]
     public void SelectSpread_returns_all_when_within_max()
     {
@@ -61,7 +71,8 @@ public sealed class RecollectionServiceTests : IDisposable
     {
         using var store = Open();
         var service = new RecollectionService(store);
-        Assert.Empty(service.Recall(A, new[] { A, B, C }, SessionId.New()));
+        var current = SeedCurrent(store, A, B, C);
+        Assert.Empty(service.Recall(A, new[] { A, B, C }, current));
     }
 
     [Fact]
@@ -74,7 +85,8 @@ public sealed class RecollectionServiceTests : IDisposable
         }, DateTimeOffset.UtcNow.AddHours(-1));
 
         var service = new RecollectionService(store);
-        var recollections = service.Recall(A, new[] { A, B, C }, SessionId.New());
+        var current = SeedCurrent(store, A, B, C);
+        var recollections = service.Recall(A, new[] { A, B, C }, current);
 
         Assert.NotEmpty(recollections);
         Assert.All(recollections, r =>
@@ -96,7 +108,8 @@ public sealed class RecollectionServiceTests : IDisposable
         }, DateTimeOffset.UtcNow.AddHours(-1));
 
         var service = new RecollectionService(store);
-        var recollections = service.Recall(A, new[] { A, B, C }, SessionId.New());
+        var current = SeedCurrent(store, A, B, C);
+        var recollections = service.Recall(A, new[] { A, B, C }, current);
 
         Assert.NotEmpty(recollections);
         Assert.DoesNotContain(recollections, r => r.Speaker == A);   // never one's own words
@@ -110,7 +123,8 @@ public sealed class RecollectionServiceTests : IDisposable
         SeedEndedSession(store, new[] { A, B, D }, new[] { (A, "OTHER_ROOM_LINE") }, DateTimeOffset.UtcNow.AddHours(-1));
 
         var service = new RecollectionService(store);
-        var recollections = service.Recall(A, new[] { A, B, C }, SessionId.New());
+        var current = SeedCurrent(store, A, B, C);
+        var recollections = service.Recall(A, new[] { A, B, C }, current);
 
         Assert.Empty(recollections);
     }
