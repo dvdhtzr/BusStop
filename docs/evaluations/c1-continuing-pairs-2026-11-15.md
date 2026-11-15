@@ -182,6 +182,14 @@ attempt/utterance counts match the durable SQLite records. No
 model failures occurred, so this batch does not exercise technical
 failure recovery paths.
 
+**Fictional characters are allowed to invent plausible personal anecdotes.**
+An unestablished past experience is not automatically a defect in this
+simulation. The concern is different: inventing *public facts* that the
+shared news does not establish, contradicting the frozen briefing,
+attributing a nonexistent memory to another participant, or asserting
+claims that clash with the same speaker's earlier position without
+acknowledging the change.
+
 The key authenticity constraints appear to be **substance and
 coherence** more than message transport or memory retrieval:
 - Character-specific anecdotes can displace discussion rather than
