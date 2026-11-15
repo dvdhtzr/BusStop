@@ -10,6 +10,8 @@ namespace BusStop.Sources;
 /// instructions, summarize, embed, or perform retrieval.</summary>
 public static class EvidenceSnapshotFactory
 {
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+
     public const int DefaultPassageCharacters = 1400;
     public const int DefaultOverlapCharacters = 180;
 
@@ -51,7 +53,7 @@ public static class EvidenceSnapshotFactory
             throw new ArgumentOutOfRangeException(nameof(passageCharacters),
                 "Passage size must be 32–8192 characters with overlap less than half its size.");
 
-        var contentHash = HexSha256(Encoding.UTF8.GetBytes(text));
+        var contentHash = HexSha256(StrictUtf8.GetBytes(text));
 
         // Serialize stable metadata with deterministic property order.
         // CapturedAt is intentionally excluded, so repeated capture of identical
