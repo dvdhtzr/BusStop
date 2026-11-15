@@ -54,8 +54,9 @@ In the continuing bridge session, Arthur starts with **"Hope's fine
 for the young, but it won't feed the east side"**: it echoes the
 *stance* of his earlier conversation, but that may arise independently
 from his fixed persona and the bridge's commute concerns. Maya brings
-in the factory again and claims a factory **"burned down"**, whereas
-the frozen factory briefing only says it closed. Daniel introduces
+in a factory that **"burned down"**; it is unclear whether she means
+her father's mill or the reopened plant, and neither the approved
+profile nor the frozen factory briefing supports the detail. Daniel introduces
 an invented classroom lathe replacement story, which Arthur then
 treats as shared experience. It is not corroborated by a prior
 session utterance.
