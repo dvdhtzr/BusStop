@@ -387,6 +387,36 @@ public sealed class ConversationStore : IDisposable
         return result;
     }
 
+    /// <summary>Ended sessions whose participant set is exactly the one given, excluding one session,
+    /// oldest first. This is the set of prior conversations "between these same people" that a continuing
+    /// session draws its recollections from.</summary>
+    public IReadOnlyList<SessionId> FindPriorSessions(IReadOnlyList<CharacterId> participants, SessionId exclude)
+    {
+        if (participants.Count == 0) return Array.Empty<SessionId>();
+
+        var placeholders = string.Join(",", participants.Select((_, i) => $"@p{i}"));
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT s.id
+            FROM sessions s
+            JOIN session_participants sp ON sp.session_id = s.id
+            WHERE s.status = 'Ended' AND s.id <> @exclude
+            GROUP BY s.id, s.created_at
+            HAVING COUNT(*) = @count
+               AND SUM(CASE WHEN sp.character_id IN ({placeholders}) THEN 1 ELSE 0 END) = @count
+            ORDER BY s.created_at ASC;
+            """;
+        cmd.Parameters.AddWithValue("@exclude", exclude.ToString());
+        cmd.Parameters.AddWithValue("@count", participants.Count);
+        for (var i = 0; i < participants.Count; i++)
+            cmd.Parameters.AddWithValue($"@p{i}", participants[i].ToString());
+
+        var result = new List<SessionId>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) result.Add(SessionId.Parse(r.GetString(0)));
+        return result;
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private void Execute(string sql)

@@ -13,7 +13,8 @@ public sealed record ContextInputs(
     IReadOnlyList<ParticipantHandle> AllParticipants,
     Briefing Briefing,
     IReadOnlyList<Utterance> CommittedHistory,
-    SpeakingOpportunity Opportunity);
+    SpeakingOpportunity Opportunity,
+    IReadOnlyList<Recollection>? Recollections = null);
 
 /// <summary>The result of building a context: the prompt to send, the participants this speaker may
 /// address, the committed utterances it may reference, and who it is. The engine turns this into a
@@ -75,6 +76,19 @@ public sealed class ParticipantContextBuilder
         sb.AppendLine($"{inputs.Briefing.Title} — {inputs.Briefing.Source}");
         sb.AppendLine(inputs.Briefing.Body);
         sb.AppendLine();
+
+        var recollections = inputs.Recollections ?? Array.Empty<Recollection>();
+        if (recollections.Count > 0)
+        {
+            sb.AppendLine("# When you last talked with them");
+            sb.AppendLine("You have met these people before. Some of what was said then — recall it only if it is worth bringing up, do not simply repeat it:");
+            foreach (var rec in recollections)
+            {
+                var who = nameById.TryGetValue(rec.Speaker, out var rn) ? rn : "Someone";
+                sb.AppendLine($"- {who} said: {rec.Content}");
+            }
+            sb.AppendLine();
+        }
 
         sb.AppendLine("# The conversation so far");
         if (recent.Count == 0)

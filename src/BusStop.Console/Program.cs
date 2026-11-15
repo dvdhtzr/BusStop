@@ -3,6 +3,7 @@ using BusStop.Console;
 using BusStop.Coordinator;
 using BusStop.Domain;
 using BusStop.Engine;
+using BusStop.Memory;
 using BusStop.Models;
 using BusStop.Persistence;
 
@@ -87,23 +88,37 @@ Action<string>? trace = modelKind == "ollama"
 using var store = ConversationStore.OpenFile(dbPath);
 store.InitializeSchema();
 
+// --continuing demonstrates memory: run a fresh "prior" conversation, then a continuing one between the
+// same characters that can recall it. Otherwise run N independent fresh conversations.
+var continuing = argv.Contains("--continuing");
+var recollectionService = new RecollectionService(store);
+
+var plan = continuing
+    ? new[]
+      {
+          (Mode: SessionMode.FreshEncounter, Label: "Prior conversation"),
+          (Mode: SessionMode.Continuing, Label: "Continuing conversation")
+      }
+    : Enumerable.Range(1, runs).Select(i => (Mode: SessionMode.FreshEncounter, Label: $"Run {i}")).ToArray();
+
 var runSections = new StringBuilder();
 var summary = new StringBuilder();
-summary.AppendLine("| Run | Termination | Opportunities | Utterances |");
+summary.AppendLine("| Session | Termination | Opportunities | Utterances |");
 summary.AppendLine("| --- | --- | --- | --- |");
 
 string lastTranscript = string.Empty;
 string lastDiagnostics = string.Empty;
 
-for (var i = 1; i <= runs; i++)
+foreach (var (mode, label) in plan)
 {
-    if (runs > 1) System.Console.WriteLine($"\n==== Run {i} of {runs} ====");
+    if (plan.Length > 1) System.Console.WriteLine($"\n==== {label} ====");
 
     var client = makeClient();
-    var session = Laboratory.Seed(store, SessionMode.FreshEncounter, modelConfigVersion);
+    var session = Laboratory.Seed(store, mode, modelConfigVersion);
     var result = new ConversationEngine(
         store, client, new BusStop.Context.ParticipantContextBuilder(), session,
-        Laboratory.Cast, Laboratory.Story, engineOptions, trace: trace).Run();
+        Laboratory.Cast, Laboratory.Story, engineOptions, trace: trace,
+        recollections: mode == SessionMode.Continuing ? recollectionService : null).Run();
 
     var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
     var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest, runConfig);
@@ -112,8 +127,8 @@ for (var i = 1; i <= runs; i++)
     lastTranscript = transcript;
     lastDiagnostics = diagnostics;
 
-    summary.AppendLine($"| {i} | {result.Reason} | {result.Opportunities} | {committed} |");
-    runSections.AppendLine($"## Run {i}");
+    summary.AppendLine($"| {label} | {result.Reason} | {result.Opportunities} | {committed} |");
+    runSections.AppendLine($"## {label}");
     runSections.AppendLine();
     runSections.AppendLine($"_{result.Reason}, {result.Opportunities} opportunities, {committed} utterances._");
     runSections.AppendLine();
@@ -131,7 +146,7 @@ File.WriteAllText(Path.Combine(outDir, "diagnostics.json"), lastDiagnostics);
 
 // The combined batch file — the one to send for review.
 var batch = new StringBuilder();
-batch.AppendLine($"# BusStop batch — {runs} run(s)");
+batch.AppendLine($"# BusStop batch — {plan.Length} session(s)");
 batch.AppendLine();
 batch.AppendLine($"**Model:** {(ollamaAdapter is null ? modelConfigVersion : ollamaAdapter.ModelName)}  ");
 batch.AppendLine($"**Protocol:** {Laboratory.ProtocolVersion} · {Laboratory.ContextVersion}  ");
@@ -147,9 +162,9 @@ batch.Append(runSections);
 var batchPath = Path.Combine(outDir, "batch.md");
 File.WriteAllText(batchPath, batch.ToString());
 
-if (runs == 1) System.Console.WriteLine(lastTranscript);
+if (plan.Length == 1) System.Console.WriteLine(lastTranscript);
 System.Console.WriteLine("\n---");
-System.Console.WriteLine($"Completed {runs} run(s).");
+System.Console.WriteLine($"Completed {plan.Length} session(s).");
 System.Console.WriteLine(summary.ToString());
 System.Console.WriteLine($"Combined report: {batchPath}");
 System.Console.WriteLine($"Database:        {dbPath}");
