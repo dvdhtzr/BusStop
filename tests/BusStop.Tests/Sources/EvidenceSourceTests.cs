@@ -100,6 +100,8 @@ public sealed class EvidenceSourceTests : IDisposable
             News with { RightsBasis = " " }, "Text"));
         Assert.Throws<ArgumentException>(() =>
             EvidenceSnapshotFactory.Capture(News, " "));
+        Assert.Throws<EncoderFallbackException>(() =>
+            EvidenceSnapshotFactory.Capture(News, "\uD800"));
     }
 
     [Fact]
