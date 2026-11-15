@@ -118,5 +118,21 @@ internal static class Schema
             briefing_id    TEXT NOT NULL REFERENCES briefings(id),
             passage_ids    TEXT NOT NULL
         );
+
+        -- R1c: a retrieval is durably recorded before the corresponding
+        -- model call. Legacy R1b databases simply gain this new table.
+        CREATE TABLE IF NOT EXISTS opportunity_source_retrievals (
+            opportunity_id TEXT PRIMARY KEY REFERENCES speaking_opportunities(id),
+            session_id     TEXT NOT NULL REFERENCES sessions(id),
+            speaker_id     TEXT NOT NULL,
+            snapshot_id    TEXT NOT NULL REFERENCES evidence_snapshots(id),
+            algorithm      TEXT NOT NULL,
+            query_text     TEXT NOT NULL,
+            passage_ids    TEXT NOT NULL,
+            scores         TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_opportunity_source_session
+            ON opportunity_source_retrievals(session_id);
         """;
 }
