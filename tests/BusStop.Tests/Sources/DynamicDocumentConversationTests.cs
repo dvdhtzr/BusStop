@@ -63,7 +63,9 @@ public sealed class DynamicDocumentConversationTests : IDisposable
             Assert.Equal(TerminationReason.NaturalEnd, result.Reason);
             retrievals = store.GetOpportunityRetrievals(session);
             Assert.Equal(model.Prompts.Count, retrievals.Count);
-            Assert.True(retrievals.Count >= 3);
+            Assert.True(retrievals.Count >= 6);
+            Assert.Contains(retrievals.SelectMany(x => x.PassageIds),
+                id => source.Passages.Any(p => p.Ordinal > 4 && p.PassageId == id));
             Assert.All(retrievals, x =>
             {
                 Assert.Equal(source.SnapshotId, x.SnapshotId);
