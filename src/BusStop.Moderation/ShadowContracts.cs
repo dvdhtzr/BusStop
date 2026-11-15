@@ -35,6 +35,18 @@ public interface IShadowModerationSink
 
 public sealed record ShadowParsedJudgment(ModerationJudgment Judgment, ModeratorSeverity Severity);
 
+/// <summary>Each attempt has an independently reserved budget unit. Never infer
+/// a natural completion from a syntactically valid response without telemetry.</summary>
+public sealed record ShadowInferenceTrace(
+    Guid RequestId,
+    ShadowReviewStatus Status,
+    string? Failure,
+    string? DoneReason,
+    int? PromptEvalCount,
+    int? EvalCount,
+    long? TotalDurationNs,
+    string? RawResponse);
+
 public sealed record ShadowReviewRecord(
     ModerationCandidate Candidate,
     UtteranceId CommittedUtterance,
@@ -48,7 +60,8 @@ public sealed record ShadowReviewRecord(
     ModeratorSeverity Severity,
     string? RawResponse,
     string? FailureDetail,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    IReadOnlyList<ShadowInferenceTrace>? Attempts = null);
 
 /// <summary>Strict JSON protocol parser. A malformed or out-of-scope result is an
 /// audit failure, never an authorization to reject, revise, or promote speech.</summary>
