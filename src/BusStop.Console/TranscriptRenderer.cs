@@ -17,6 +17,8 @@ public static class TranscriptRenderer
         var sessionRecord = store.GetSession(session);
         var briefing = sessionRecord is not null ? store.GetBriefing(sessionRecord.Briefing) : null;
         var sb = new StringBuilder();
+        var turnRetrievals = store.GetOpportunityRetrievals(session)
+            .ToDictionary(x => x.Opportunity);
 
         sb.AppendLine("# BusStop transcript");
         sb.AppendLine();
@@ -26,8 +28,17 @@ public static class TranscriptRenderer
         if (evidence is not null)
         {
             sb.AppendLine($"**Evidence snapshot:** {evidence.SnapshotId}  ");
-            sb.AppendLine($"**Visible source passages:** {string.Join(", ", evidence.ExposedPassageIds)}  ");
-            sb.AppendLine("_The document discussion used only the listed passages; no live RAG retrieval was available._");
+            if (sessionRecord?.ContextVersion == EvidenceContextVersions.DynamicLexicalRetrieval)
+            {
+                sb.AppendLine("**Retrieval:** local lexical RAG, up to three passages per speaking turn  ");
+                sb.AppendLine($"**Unique passages retrieved:** {turnRetrievals.Values.SelectMany(x => x.PassageIds).Distinct().Count()}  ");
+                sb.AppendLine("_The exact evidence for each spoken turn is recorded below; this is not a guarantee that each claim is supported._");
+            }
+            else
+            {
+                sb.AppendLine($"**Visible source passages:** {string.Join(", ", evidence.ExposedPassageIds)}  ");
+                sb.AppendLine("_The document discussion used only the listed passages; no live RAG retrieval was available._");
+            }
         }
         sb.AppendLine($"**Participants:** {string.Join(", ", cast.Select(c => c.Name))}");
         sb.AppendLine();
@@ -46,6 +57,8 @@ public static class TranscriptRenderer
                 var speaker = nameById.GetValueOrDefault(u.Speaker, "Someone");
                 var to = u.Addressee is { } a && nameById.TryGetValue(a, out var an) ? $" _(to {an})_" : string.Empty;
                 sb.AppendLine($"**{speaker}**{to}: {u.Text}");
+                if (turnRetrievals.TryGetValue(u.Opportunity, out var retrieval))
+                    sb.AppendLine($"_Retrieved before this turn: {string.Join(", ", retrieval.PassageIds)}_");
                 sb.AppendLine();
             }
         }
@@ -61,6 +74,7 @@ public static class TranscriptRenderer
         var committed = store.GetCommittedUtterances(session);
         var attempts = store.GetAttempts(session);
         var evidence = store.GetSessionEvidence(session);
+        var retrieved = store.GetOpportunityRetrievals(session);
 
         var outcomeCounts = attempts
             .GroupBy(a => a.Outcome)
@@ -83,7 +97,19 @@ public static class TranscriptRenderer
                 snapshotId = evidence.SnapshotId,
                 briefingId = evidence.Briefing.ToString(),
                 exposedPassageIds = evidence.ExposedPassageIds.ToArray(),
-                fullDocumentRetrieval = false
+                fullDocumentRetrieval = false,
+                onDemandRetrieval = retrieved.Count > 0 ||
+                    sessionRecord?.ContextVersion == EvidenceContextVersions.DynamicLexicalRetrieval,
+                uniqueRetrievedPassages = retrieved.SelectMany(x => x.PassageIds).Distinct().Count(),
+                turnRetrievals = retrieved.Select(x => new
+                {
+                    opportunityId = x.Opportunity.ToString(),
+                    speakerId = x.Speaker.ToString(),
+                    algorithm = x.Algorithm,
+                    query = x.Query,
+                    passageIds = x.PassageIds.ToArray(),
+                    scores = x.Scores.ToArray()
+                }).ToArray()
             },
             config = new
             {

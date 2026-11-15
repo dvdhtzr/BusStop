@@ -18,6 +18,7 @@ using BusStop.Sources;
 //       [--continuing | --fresh-bridge] [--c2-attribution]
 //   dotnet run --project src/BusStop.Console -- --inspect-document <file.txt|file.md>
 //   dotnet run --project src/BusStop.Console -- --discuss-document <file.txt|file.md> --model ollama ...
+//   dotnet run --project src/BusStop.Console -- --rag-document <file.txt|file.md> --model ollama ...
 
 var argv = Environment.GetCommandLineArgs().Skip(1).ToArray();
 string? Arg(string name)
@@ -32,7 +33,8 @@ if (argv.Contains("--inspect-document"))
 {
     if (string.IsNullOrWhiteSpace(Arg("--inspect-document")) ||
         argv.Any(x => x is "--model" or "--continuing" or "--fresh-bridge" or
-            "--c2-attribution" or "--runs" or "--db" or "--out" or "--discuss-document"))
+            "--c2-attribution" or "--runs" or "--db" or "--out" or
+            "--discuss-document" or "--rag-document"))
     {
         System.Console.Error.WriteLine(
             "Usage: --inspect-document <file.txt|file.md> (no conversation flags).");
@@ -65,16 +67,21 @@ var continuing = argv.Contains("--continuing");
 var freshBridge = argv.Contains("--fresh-bridge");
 var c2Attribution = argv.Contains("--c2-attribution");
 var discussDocument = argv.Contains("--discuss-document");
-var contextVersion = discussDocument
-    ? EvidenceBriefingBuilder.ContextVersion
-    : Laboratory.GetContextVersion(c2Attribution);
+var ragDocument = argv.Contains("--rag-document");
+var contextVersion = ragDocument
+    ? EvidenceBriefingBuilder.RetrievalContextVersion
+    : discussDocument
+        ? EvidenceBriefingBuilder.ContextVersion
+        : Laboratory.GetContextVersion(c2Attribution);
 
-if (discussDocument &&
-    (string.IsNullOrWhiteSpace(Arg("--discuss-document")) ||
+if ((discussDocument || ragDocument) &&
+    ((discussDocument && ragDocument) ||
+     string.IsNullOrWhiteSpace(Arg(discussDocument ? "--discuss-document" : "--rag-document")) ||
      modelKind != "ollama" || continuing || freshBridge || c2Attribution || runs != 1))
 {
     System.Console.Error.WriteLine(
-        "--discuss-document requires --model ollama and a single fresh session; " +
+        "Document discussion requires --model ollama, a single fresh session, and " +
+        "exactly one of --discuss-document or --rag-document; " +
         "it cannot be combined with --continuing, --fresh-bridge or --c2-attribution.");
     return 2;
 }
@@ -82,16 +89,27 @@ if (discussDocument &&
 EvidenceSnapshot? documentSnapshot = null;
 Briefing? documentBriefing = null;
 IReadOnlyList<string>? documentPassages = null;
-if (discussDocument)
+if (discussDocument || ragDocument)
 {
     try
     {
-        documentSnapshot = new LocalTextDocumentImporter().Import(Arg("--discuss-document")!);
-        (documentBriefing, documentPassages) = EvidenceBriefingBuilder.Build(documentSnapshot);
-        System.Console.WriteLine(
-            $"Document '{documentSnapshot.Descriptor.Title}': showing " +
-            $"{documentPassages.Count} of {documentSnapshot.Passages.Count} passages. " +
-            "No on-demand retrieval (RAG) in R1b.");
+        documentSnapshot = new LocalTextDocumentImporter().Import(
+            Arg(discussDocument ? "--discuss-document" : "--rag-document")!);
+        if (ragDocument)
+        {
+            documentBriefing = EvidenceBriefingBuilder.BuildForRetrieval(documentSnapshot);
+            System.Console.WriteLine(
+                $"Document '{documentSnapshot.Descriptor.Title}': {documentSnapshot.Passages.Count} " +
+                "passages available to local lexical retrieval; maximum 3 per speaking turn.");
+        }
+        else
+        {
+            (documentBriefing, documentPassages) = EvidenceBriefingBuilder.Build(documentSnapshot);
+            System.Console.WriteLine(
+                $"Document '{documentSnapshot.Descriptor.Title}': showing " +
+                $"{documentPassages.Count} of {documentSnapshot.Passages.Count} passages. " +
+                "No on-demand retrieval (RAG) in R1b.");
+        }
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
         NotSupportedException or ArgumentException or InvalidOperationException)
@@ -175,8 +193,9 @@ store.InitializeSchema();
 var recollectionService = new RecollectionService(store);
 if (documentSnapshot is not null)
     store.SaveEvidenceSnapshot(documentSnapshot);
-var plan = discussDocument
-    ? new[] { (Mode: SessionMode.FreshEncounter, Label: "Document discussion", Briefing: documentBriefing!) }
+var plan = discussDocument || ragDocument
+    ? new[] { (Mode: SessionMode.FreshEncounter, Label: ragDocument
+        ? "Document discussion (lexical RAG)" : "Document discussion", Briefing: documentBriefing!) }
     : Laboratory.BuildRunPlan(runs, continuing, freshBridge);
 
 var runSections = new StringBuilder();
@@ -196,11 +215,19 @@ foreach (var (mode, label, briefing) in plan)
     var client = makeClient();
     var session = Laboratory.Seed(store, mode, modelConfigVersion, briefing, contextVersion);
     if (documentSnapshot is not null)
-        store.PinSessionEvidence(session, documentSnapshot.SnapshotId, documentPassages!);
+    {
+        if (ragDocument)
+            store.PinSessionEvidenceForRetrieval(session, documentSnapshot.SnapshotId);
+        else
+            store.PinSessionEvidence(session, documentSnapshot.SnapshotId, documentPassages!);
+    }
     var result = new ConversationEngine(
         store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
         Laboratory.Cast, briefing, engineOptions, trace: trace,
-        recollections: mode == SessionMode.Continuing ? recollectionService : null).Run();
+        recollections: mode == SessionMode.Continuing ? recollectionService : null,
+        sourceProvider: ragDocument
+            ? new LocalOpportunitySourceProvider(store, documentSnapshot!)
+            : null).Run();
 
     var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
     var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest, runConfig);

@@ -44,6 +44,7 @@ public sealed class ConversationEngine
     private readonly Func<DateTimeOffset> _clock;
     private readonly Action<string>? _trace;
     private readonly RecollectionService? _recollections;
+    private readonly IOpportunitySourceProvider? _sourceProvider;
     private readonly SessionMode _mode;
 
     private readonly FloorCoordinator _coordinator;
@@ -60,7 +61,8 @@ public sealed class ConversationEngine
         EngineOptions? options = null,
         Func<DateTimeOffset>? clock = null,
         Action<string>? trace = null,
-        RecollectionService? recollections = null)
+        RecollectionService? recollections = null,
+        IOpportunitySourceProvider? sourceProvider = null)
     {
         _store = store;
         _model = model;
@@ -71,7 +73,14 @@ public sealed class ConversationEngine
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _trace = trace;
         _recollections = recollections;
-        _mode = store.GetSession(session)?.Mode ?? SessionMode.FreshEncounter;
+        _sourceProvider = sourceProvider;
+        var sessionRecord = store.GetSession(session)
+            ?? throw new InvalidOperationException("Conversation session does not exist.");
+        _mode = sessionRecord.Mode;
+        var dynamicSource = sessionRecord.ContextVersion == EvidenceContextVersions.DynamicLexicalRetrieval;
+        if (dynamicSource != (_sourceProvider is not null))
+            throw new InvalidOperationException(
+                "Dynamic retrieval requires a source provider matching the pinned session context.");
         _handles = participants.Select(p => new ParticipantHandle(p.Id, p.Name)).ToList();
         _profiles = participants.ToDictionary(p => p.Id);
 
@@ -164,7 +173,12 @@ public sealed class ConversationEngine
         if (_mode == SessionMode.Continuing && _recollections is not null)
             recollections = _recollections.Recall(offer.Participant, _handles.Select(h => h.Id).ToList(), _session);
 
-        var built = _builder.Build(new ContextInputs(self, _handles, _briefing, history, opportunity, recollections));
+        // Provider persists exactly what it exposes before inference. Recovery
+        // never treats uncommitted proposals as spoken evidence.
+        var sourceEvidence = _sourceProvider?.Retrieve(opportunity, history);
+        var built = _builder.Build(new ContextInputs(
+            self, _handles, _briefing, history, opportunity, recollections,
+            sourceEvidence?.Passages));
 
         var validationContext = new ValidationContext(
             _handles.ToDictionary(h => h.Name, h => h.Id),
