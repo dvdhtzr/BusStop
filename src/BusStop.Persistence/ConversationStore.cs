@@ -8,7 +8,7 @@ namespace BusStop.Persistence;
 /// model's output is not. Committing an utterance assigns the next sequence number inside a single
 /// transaction, and a unique constraint on (session, sequence) plus one on (opportunity) make
 /// duplication impossible even under retry or restart.</summary>
-public sealed class ConversationStore : IDisposable
+public sealed partial class ConversationStore : IDisposable
 {
     private readonly SqliteConnection _connection;
 
