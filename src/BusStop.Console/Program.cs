@@ -14,6 +14,7 @@ using BusStop.Persistence;
 // Usage:
 //   dotnet run --project src/BusStop.Console -- [--model stub|ollama] [--ollama-model <name>]
 //       [--ollama-url <url>] [--no-think] [--ollama-timeout <seconds>] [--runs <n>] [--db <path>] [--out <dir>]
+//       [--continuing | --fresh-bridge]
 
 var argv = Environment.GetCommandLineArgs().Skip(1).ToArray();
 string? Arg(string name)
@@ -24,6 +25,13 @@ string? Arg(string name)
 
 var modelKind = Arg("--model") ?? "stub";
 var runs = int.TryParse(Arg("--runs"), out var r) && r > 0 ? r : 1;
+var continuing = argv.Contains("--continuing");
+var freshBridge = argv.Contains("--fresh-bridge");
+if (continuing && freshBridge)
+{
+    System.Console.Error.WriteLine("--fresh-bridge is a fresh-session control and cannot be combined with --continuing.");
+    return 2;
+}
 var outDir = Arg("--out") ?? Directory.GetCurrentDirectory();
 Directory.CreateDirectory(outDir);
 var dbPath = Arg("--db") ?? Path.Combine(outDir, $"busstop-lab-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
@@ -88,20 +96,11 @@ Action<string>? trace = modelKind == "ollama"
 using var store = ConversationStore.OpenFile(dbPath);
 store.InitializeSchema();
 
-// --continuing demonstrates memory: run a fresh "prior" conversation, then a continuing one between the
-// same characters that can recall it. Otherwise run N independent fresh conversations.
-var continuing = argv.Contains("--continuing");
+// C1b: --fresh-bridge starts independent FreshEncounter bridge sessions with no
+// recollection context. The established --continuing pair and default factory runs
+// retain their original behavior.
 var recollectionService = new RecollectionService(store);
-
-var plan = continuing
-    ? new[]
-      {
-          (Mode: SessionMode.FreshEncounter, Label: "Prior conversation", Briefing: Laboratory.Story),
-          (Mode: SessionMode.Continuing, Label: "Continuing conversation", Briefing: Laboratory.SecondStory)
-      }
-    : Enumerable.Range(1, runs)
-        .Select(i => (Mode: SessionMode.FreshEncounter, Label: $"Run {i}", Briefing: Laboratory.Story))
-        .ToArray();
+var plan = Laboratory.BuildRunPlan(runs, continuing, freshBridge);
 
 var runSections = new StringBuilder();
 var summary = new StringBuilder();
