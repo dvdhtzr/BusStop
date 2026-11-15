@@ -148,12 +148,12 @@ public sealed class LaboratorySmokeTests : IDisposable
         Assert.Equal(Laboratory.C2ContextVersion, Laboratory.GetContextVersion(true));
         Assert.DoesNotContain(Laboratory.C2AttributionGuidance, control.Prompt);
         Assert.Contains(Laboratory.C2AttributionGuidance, treatment.Prompt);
-        Assert.StartsWith(
-            control.Prompt[..control.Prompt.IndexOf("# The story you are discussing", StringComparison.Ordinal)],
-            treatment.Prompt[..treatment.Prompt.IndexOf("# The story you are discussing", StringComparison.Ordinal)]
-                .Replace(" " + Laboratory.C2AttributionGuidance, ""));
-        Assert.Equal(control.AddressableParticipants, treatment.AddressableParticipants);
-        Assert.Equal(control.VisibleUtteranceIds, treatment.VisibleUtteranceIds);
+        Assert.Equal(control.Prompt, treatment.Prompt.Replace(
+            " " + Laboratory.C2AttributionGuidance, "", StringComparison.Ordinal));
+        Assert.Equal(
+            control.AddressableParticipants.Select(p => p.Id),
+            treatment.AddressableParticipants.Select(p => p.Id));
+        Assert.True(control.VisibleUtteranceIds.SetEquals(treatment.VisibleUtteranceIds));
     }
 
     [Fact]
