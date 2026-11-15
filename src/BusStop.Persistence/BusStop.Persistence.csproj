@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BusStop.Domain\BusStop.Domain.csproj" />
+    <ProjectReference Include="..\BusStop.Moderation\BusStop.Moderation.csproj" />
   </ItemGroup>
 
   <ItemGroup>

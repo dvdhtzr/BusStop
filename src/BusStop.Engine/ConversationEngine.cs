@@ -1,3 +1,4 @@
+using BusStop.Moderation;
 using BusStop.Context;
 using BusStop.Coordinator;
 using BusStop.Domain;
@@ -45,6 +46,7 @@ public sealed class ConversationEngine
     private readonly Action<string>? _trace;
     private readonly RecollectionService? _recollections;
     private readonly SessionMode _mode;
+    private readonly ModerationSessionPolicy _moderationPolicy;
 
     private readonly FloorCoordinator _coordinator;
     private int _opportunityOrdinal;
@@ -72,6 +74,10 @@ public sealed class ConversationEngine
         _trace = trace;
         _recollections = recollections;
         _mode = store.GetSession(session)?.Mode ?? SessionMode.FreshEncounter;
+        _moderationPolicy = store.GetModerationPolicy(session);
+        // M0 defines future modes but must never activate unimplemented moderation.
+        if (_moderationPolicy.Mode != ModerationOperatingMode.Disabled)
+            throw new InvalidOperationException("Only disabled moderation is supported in M0.");
         _handles = participants.Select(p => new ParticipantHandle(p.Id, p.Name)).ToList();
         _profiles = participants.ToDictionary(p => p.Id);
 
@@ -203,6 +209,17 @@ public sealed class ConversationEngine
         switch (decision.Outcome)
         {
             case AttemptOutcome.ValidSpeak:
+                // The M0 no-op boundary is contract-validated but never invokes an LLM.
+                // Shadow and enforcement paths are deliberately NOT operational in M0.
+                var candidate = new ModerationCandidate(
+                    Guid.NewGuid(), _session, opportunityId, offer.Participant,
+                    boundary, decision.Text!);
+                var scope = new ModerationEvidenceScope(
+                    _session, opportunityId, offer.Participant, boundary,
+                    new HashSet<string>(StringComparer.Ordinal));
+                var moderatorResult = DisabledModerator.Instance.Review(candidate, scope);
+                if (moderatorResult.Disposition != ModerationDisposition.Accept)
+                    throw new InvalidOperationException("Disabled moderator returned an invalid disposition.");
                 // Commit before delivery: the utterance becomes visible to others only once this
                 // returns, because every context is read back from committed utterances.
                 var repliesTo = decision.RepliesTo ?? offer.ReplyTo;

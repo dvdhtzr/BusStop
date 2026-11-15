@@ -33,7 +33,37 @@ internal static class Schema
             context_version      TEXT NOT NULL,
             status               TEXT NOT NULL,
             created_at           TEXT NOT NULL,
-            ended_at             TEXT NULL
+            ended_at             TEXT NULL,
+            moderation_policy_marker TEXT NULL
+        );
+
+        -- New sessions pin an immutable policy. Legacy sessions have a NULL marker
+        -- and no policy row; a non-NULL marker with a missing row fails closed.
+        CREATE TABLE IF NOT EXISTS session_moderation_policies (
+            session_id                  TEXT PRIMARY KEY REFERENCES sessions(id),
+            contract_version            TEXT NOT NULL,
+            mode                        TEXT NOT NULL,
+            rule_version                TEXT NOT NULL,
+            prompt_version              TEXT NOT NULL,
+            model_name                  TEXT NULL,
+            model_digest                TEXT NULL,
+            temperature                 REAL NULL,
+            think                       INTEGER NULL,
+            max_moderator_calls         INTEGER NOT NULL,
+            max_revisions               INTEGER NOT NULL,
+            stagnation_window           INTEGER NOT NULL,
+            nudge_cooldown              INTEGER NOT NULL
+        );
+
+        -- Reserved before future inference dispatch. Reserved/interrupted attempts
+        -- count against the separate moderator ceiling even after a crash.
+        CREATE TABLE IF NOT EXISTS moderator_inference_reservations (
+            request_id       TEXT PRIMARY KEY,
+            session_id       TEXT NOT NULL REFERENCES sessions(id),
+            opportunity_id   TEXT NULL REFERENCES speaking_opportunities(id),
+            purpose          TEXT NOT NULL,
+            status           TEXT NOT NULL,
+            reserved_at      TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS session_participants (
