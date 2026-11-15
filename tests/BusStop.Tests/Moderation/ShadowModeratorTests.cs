@@ -212,8 +212,8 @@ public sealed class ShadowModeratorTests : IDisposable
         {
             Assert.Equal(ShadowReviewStatus.Reviewed, r.Status);
             Assert.Equal(ModerationDisposition.Accept, r.Judgment!.Disposition);
-            Assert.True(store.GetCommittedUtterances(session)
-                .Any(u => u.Id == r.CommittedUtterance && u.Text == r.Candidate.Text));
+            Assert.Contains(store.GetCommittedUtterances(session),
+                u => u.Id == r.CommittedUtterance && u.Text == r.Candidate.Text);
         });
 
         using var reopened = Open();
@@ -299,8 +299,116 @@ public sealed class ShadowModeratorTests : IDisposable
         Assert.Single(store.GetCommittedUtterances(session));
         Assert.Equal(ShadowReviewStatus.InvalidResponse,
             Assert.Single(store.GetShadowReviews(session)).Status);
-        Assert.Equal(ModerationAttemptStatus.Completed,
-            Assert.Single(store.GetModeratorReservations(session)).Status);
+        Assert.Equal(2, store.GetModeratorReservations(session).Count);
+        Assert.All(store.GetModeratorReservations(session), reservation =>
+            Assert.Equal(ModerationAttemptStatus.Completed, reservation.Status));
+        Assert.Equal(2, Assert.Single(store.GetShadowReviews(session)).Attempts!.Count);
+    }
+
+    [Fact]
+    public void Ollama_schema_pins_candidate_identity_and_required_fields()
+    {
+        var id = Guid.NewGuid();
+        using var schema = JsonDocument.Parse(ShadowResponseParser.JsonSchemaFor(id));
+        var root = schema.RootElement;
+        var properties = root.GetProperty("properties");
+        Assert.Equal(id.ToString("D"),
+            properties.GetProperty("candidateId").GetProperty("enum")[0].GetString());
+        Assert.Contains(root.GetProperty("required").EnumerateArray(),
+            entry => entry.GetString() == "finding");
+        Assert.Equal("object", root.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task Exact_cross_speaker_copy_is_identified_without_ollama_even_after_budget()
+    {
+        using var store = Open();
+        var (session, cast) = Seed(store, Policy(calls: 1));
+        var model = new EchoModerator();
+        var observer = new ShadowModerationWorker(
+            _path, session, store.GetModerationPolicy(session), model, cast, _briefing,
+            sampleEvery: 1, queueCapacity: 8);
+        new ConversationEngine(store, new StubModelClient(new[]
+        {
+            StubResponses.Speak("This machine needs inspection."),
+            StubResponses.Speak("This machine needs inspection.")
+        }), new ParticipantContextBuilder(), session, cast, _briefing,
+            new EngineOptions(MaxOpportunities: 2), shadowSink: observer).Run();
+        await observer.DrainAsync();
+
+        Assert.Equal(2, store.GetCommittedUtterances(session).Count);
+        Assert.Equal(1, model.Calls);
+        Assert.Single(store.GetModeratorReservations(session));
+        var copy = Assert.Single(store.GetShadowReviews(session)
+            .Where(r => r.Judgment?.Finding?.Kind == ModerationIssueKind.ExactDuplicate));
+        Assert.Null(copy.RequestId);
+        Assert.Empty(copy.Attempts!);
+        Assert.Equal(ShadowReviewStatus.Reviewed, copy.Status);
+        Assert.Equal(ModerationDisposition.Advisory, copy.Judgment!.Disposition);
+    }
+
+    private sealed class RecoveringModerator : IModelClient
+    {
+        public int Calls { get; private set; }
+        public string ModelName => "local-moderator";
+        public string ModelDigest => "local-digest";
+
+        public ModelResponse Decide(ModelRequest request, CancellationToken token = default)
+        {
+            Assert.NotNull(request.JsonSchema);
+            Assert.Equal(8192, request.ContextTokens);
+            Assert.Equal(768, request.MaxGeneratedTokens);
+            Calls++;
+            if (Calls == 1)
+                return ModelResponse.Responded("{\"contractVersion\":") with
+                {
+                    Generation = new ModelGenerationTelemetry("length", 2400, 32, 1000)
+                };
+            var match = Regex.Match(request.Prompt,
+                @"Candidate ID: (?<id>[a-f0-9-]{36})", RegexOptions.IgnoreCase);
+            Assert.True(match.Success);
+            return ModelResponse.Responded(JsonSerializer.Serialize(new
+            {
+                contractVersion = ShadowResponseParser.ContractVersion,
+                candidateId = match.Groups["id"].Value,
+                disposition = "Accept",
+                severity = "None",
+                finding = (object?)null
+            })) with
+            {
+                Generation = new ModelGenerationTelemetry("stop", 2300, 45, 1000)
+            };
+        }
+    }
+
+    [Fact]
+    public async Task Invalid_json_retry_spends_new_reservation_and_records_both_telemetry_traces()
+    {
+        using var store = Open();
+        var (session, cast) = Seed(store, Policy(calls: 2));
+        var model = new RecoveringModerator();
+        var observer = new ShadowModerationWorker(
+            _path, session, store.GetModerationPolicy(session), model, cast, _briefing,
+            sampleEvery: 1, queueCapacity: 4);
+        new ConversationEngine(store, new StubModelClient(new[]
+        {
+            StubResponses.Speak("A careful repair is worth the delay.")
+        }), new ParticipantContextBuilder(), session, cast, _briefing,
+            new EngineOptions(MaxOpportunities: 1), shadowSink: observer).Run();
+        await observer.DrainAsync();
+
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(2, store.GetModeratorReservations(session).Count);
+        var review = Assert.Single(store.GetShadowReviews(session));
+        Assert.Equal(ShadowReviewStatus.Reviewed, review.Status);
+        Assert.Equal(2, review.Attempts!.Count);
+        Assert.Equal("length", review.Attempts[0].DoneReason);
+        Assert.Equal(ShadowReviewStatus.InvalidResponse, review.Attempts[0].Status);
+        Assert.Equal("stop", review.Attempts[1].DoneReason);
+        Assert.Equal(ShadowReviewStatus.Reviewed, review.Attempts[1].Status);
+        Assert.Single(store.GetCommittedUtterances(session));
+        using var reopened = Open();
+        Assert.Equal(2, Assert.Single(reopened.GetShadowReviews(session)).Attempts!.Count);
     }
 
     [Fact]
