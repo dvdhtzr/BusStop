@@ -128,6 +128,60 @@ public sealed class LaboratorySmokeTests : IDisposable
         Assert.Throws<ArgumentOutOfRangeException>(() => Laboratory.BuildRunPlan(0));
     }
 
+    [Fact]
+    public void C2_attribution_is_opt_in_and_default_prompt_is_unchanged()
+    {
+        var handles = Laboratory.Cast.Select(c => new ParticipantHandle(c.Id, c.Name)).ToArray();
+        var opening = new SpeakingOpportunity(
+            OpportunityId.New(), SessionId.New(), Laboratory.Arthur.Id,
+            OpportunityReason.Opening, 0, OpportunityStatus.Offered);
+        var inputs = new ContextInputs(
+            Laboratory.Arthur, handles, Laboratory.SecondStory,
+            Array.Empty<Utterance>(), opening);
+
+        var original = new ParticipantContextBuilder().Build(inputs);
+        var control = Laboratory.BuildContextBuilder(false).Build(inputs);
+        var treatment = Laboratory.BuildContextBuilder(true).Build(inputs);
+
+        Assert.Equal(original.Prompt, control.Prompt);
+        Assert.Equal(Laboratory.ContextVersion, Laboratory.GetContextVersion(false));
+        Assert.Equal(Laboratory.C2ContextVersion, Laboratory.GetContextVersion(true));
+        Assert.DoesNotContain(Laboratory.C2AttributionGuidance, control.Prompt);
+        Assert.Contains(Laboratory.C2AttributionGuidance, treatment.Prompt);
+        Assert.StartsWith(
+            control.Prompt[..control.Prompt.IndexOf("# The story you are discussing", StringComparison.Ordinal)],
+            treatment.Prompt[..treatment.Prompt.IndexOf("# The story you are discussing", StringComparison.Ordinal)]
+                .Replace(" " + Laboratory.C2AttributionGuidance, ""));
+        Assert.Equal(control.AddressableParticipants, treatment.AddressableParticipants);
+        Assert.Equal(control.VisibleUtteranceIds, treatment.VisibleUtteranceIds);
+    }
+
+    [Fact]
+    public void C2_variant_and_control_pin_distinct_context_versions_in_diagnostics()
+    {
+        using var store = ConversationStore.OpenFile(_path);
+        store.InitializeSchema();
+
+        foreach (var enabled in new[] { false, true })
+        {
+            var version = Laboratory.GetContextVersion(enabled);
+            var session = Laboratory.Seed(
+                store, SessionMode.FreshEncounter, briefing: Laboratory.SecondStory,
+                contextVersion: version);
+            var result = new ConversationEngine(
+                store, Laboratory.DemoModel(), Laboratory.BuildContextBuilder(enabled),
+                session, Laboratory.Cast, Laboratory.SecondStory).Run();
+
+            Assert.Equal(TerminationReason.NaturalEnd, result.Reason);
+            Assert.Equal(version, store.GetSession(session)!.ContextVersion);
+            var diagnostics = TranscriptRenderer.RenderDiagnostics(
+                store, session, result, "stub", "stub-digest");
+            using var doc = JsonDocument.Parse(diagnostics);
+            Assert.Equal(version, doc.RootElement.GetProperty("config")
+                .GetProperty("contextVersion").GetString());
+        }
+    }
+
     public void Dispose()
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
