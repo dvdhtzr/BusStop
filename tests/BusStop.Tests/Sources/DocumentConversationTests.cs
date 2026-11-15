@@ -57,13 +57,13 @@ public sealed class DocumentConversationTests : IDisposable
             Assert.Equal(snapshot.Descriptor, saved!.Descriptor);
             Assert.Equal(snapshot.TextSha256, saved.TextSha256);
             Assert.Equal(snapshot.SnapshotText, saved.SnapshotText);
-            Assert.Equal(snapshot.Passages, saved.Passages);
+            Assert.Equal(snapshot.Passages.ToArray(), saved.Passages.ToArray());
 
             var pin = reopened.GetSessionEvidence(session);
             Assert.NotNull(pin);
             Assert.Equal(snapshot.SnapshotId, pin!.SnapshotId);
             Assert.Equal(briefing.Id, pin.Briefing);
-            Assert.Equal(ids, pin.ExposedPassageIds);
+            Assert.Equal(ids.ToArray(), pin.ExposedPassageIds.ToArray());
             Assert.Equal(EvidenceBriefingBuilder.ContextVersion,
                 reopened.GetSession(session)!.ContextVersion);
         }
@@ -87,7 +87,7 @@ public sealed class DocumentConversationTests : IDisposable
         Assert.Throws<InvalidOperationException>(() =>
             store.SaveEvidenceSnapshot(differentChunking));
         var stored = store.GetEvidenceSnapshot(initial.SnapshotId)!;
-        Assert.Equal(initial.Passages, stored.Passages);
+        Assert.Equal(initial.Passages.ToArray(), stored.Passages.ToArray());
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class DocumentConversationTests : IDisposable
         store.PinSessionEvidence(session, snapshot.SnapshotId, ids);
         Assert.Throws<InvalidOperationException>(() =>
             store.PinSessionEvidence(session, snapshot.SnapshotId, new[] { ids[0] }));
-        Assert.Equal(ids, store.GetSessionEvidence(session)!.ExposedPassageIds);
+        Assert.Equal(ids.ToArray(), store.GetSessionEvidence(session)!.ExposedPassageIds.ToArray());
 
         // Inference isn't needed to test the no-rebind-after-first-turn rule.
         var opp = new SpeakingOpportunity(
