@@ -45,13 +45,37 @@ public sealed class OllamaAdapter : IModelClient, IDisposable
 
     public ModelResponse Decide(ModelRequest request, CancellationToken cancellationToken = default)
     {
+        if (request.MaxGeneratedTokens is < 1 or > 4096 ||
+            request.ContextTokens is < 1024 or > 131072)
+            throw new ArgumentOutOfRangeException(nameof(request), "Invalid generation limits.");
+
+        var options = new Dictionary<string, object?>
+        {
+            ["temperature"] = _temperature
+        };
+        if (request.MaxGeneratedTokens is { } maxGenerated)
+            options["num_predict"] = maxGenerated;
+        if (request.ContextTokens is { } context)
+            options["num_ctx"] = context;
+
+        // Schema validation remains host-authoritative. Constrained decoding is
+        // defense in depth, never a replacement for candidate/evidence validation.
+        object format = "json";
+        if (request.JsonSchema is { } schema)
+        {
+            using var parsed = JsonDocument.Parse(schema);
+            if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("Ollama JSON schema must be an object.", nameof(request));
+            format = parsed.RootElement.Clone();
+        }
+
         var body = new Dictionary<string, object?>
         {
             ["model"] = ModelName,
             ["prompt"] = request.Prompt,
             ["stream"] = false,
-            ["format"] = "json",
-            ["options"] = new { temperature = _temperature }
+            ["format"] = format,
+            ["options"] = options
         };
         // For reasoning models (e.g. qwen3), think:false skips the hidden reasoning pass, which is a
         // large speed-up for short conversational turns. Omitted entirely when not specified.
@@ -67,7 +91,23 @@ public sealed class OllamaAdapter : IModelClient, IDisposable
             var payload = response.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
             using var doc = JsonDocument.Parse(payload);
             var text = doc.RootElement.TryGetProperty("response", out var r) ? r.GetString() : null;
-            return text is null ? ModelResponse.TransportError() : ModelResponse.Responded(text);
+            if (text is null) return ModelResponse.TransportError();
+            var root = doc.RootElement;
+            static int? Count(JsonElement root, string key) =>
+                root.TryGetProperty(key, out var value) && value.TryGetInt32(out var count)
+                    ? count : null;
+            static long? Duration(JsonElement root, string key) =>
+                root.TryGetProperty(key, out var value) && value.TryGetInt64(out var duration)
+                    ? duration : null;
+            return ModelResponse.Responded(text) with
+            {
+                Generation = new ModelGenerationTelemetry(
+                    root.TryGetProperty("done_reason", out var done) &&
+                    done.ValueKind == JsonValueKind.String ? done.GetString() : null,
+                    Count(root, "prompt_eval_count"),
+                    Count(root, "eval_count"),
+                    Duration(root, "total_duration"))
+            };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

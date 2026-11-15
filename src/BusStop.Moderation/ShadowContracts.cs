@@ -56,6 +56,42 @@ public static class ShadowResponseParser
 {
     public const string ContractVersion = "shadow-m1-v1";
 
+    /// <summary>Pin the candidate identity in Ollama constrained decoding.
+    /// Only the host validator determines whether generated evidence is authorized.</summary>
+    public static string JsonSchemaFor(Guid candidateId) => $"""
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contractVersion", "candidateId", "disposition", "severity", "finding"],
+          "properties": {
+            "contractVersion": { "type": "string", "enum": ["shadow-m1-v1"] },
+            "candidateId": { "type": "string", "enum": ["{{candidateId:D}}"] },
+            "disposition": { "type": "string", "enum": ["Accept", "Advisory", "RequestRevision", "Abstain"] },
+            "severity": { "type": "string", "enum": ["None", "Low", "Medium", "High"] },
+            "finding": {
+              "anyOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "claimSpan", "explanation", "evidenceReferences", "uncertain", "narrowFeedback"],
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["UnestablishedAutobiography", "MisattributedExperience",
+                      "UnsupportedFactualClaim", "ContradictedFactualClaim", "ExactDuplicate", "SemanticRepetition", "Other"] },
+                    "claimSpan": { "type": "string", "minLength": 1 },
+                    "explanation": { "type": "string", "minLength": 1, "maxLength": 240 },
+                    "evidenceReferences": { "type": "array", "items": { "type": "string" }, "maxItems": 4 },
+                    "uncertain": { "type": "boolean" },
+                    "narrowFeedback": { "type": ["string", "null"], "maxLength": 120 }
+                  }
+                }
+              ]
+            }
+          }
+        }
+        """;
+
+
     public static ShadowParsedJudgment Parse(
         string rawJson, ModerationCandidate candidate, ModerationEvidenceScope scope)
     {
