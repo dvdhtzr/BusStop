@@ -48,19 +48,35 @@ public static class Laboratory
         "roughly 400 workers initially and train them for automated lines. Local officials welcomed the " +
         "news; a former union representative said the wages and the number of jobs are both lower than before.");
 
+    /// <summary>A second, deliberately unrelated briefing, used for the cross-topic memory test: if a
+    /// continuing conversation about the bridge brings up the factory, the pay, or the retraining, that
+    /// can only have come from remembering the prior conversation, not from the topic.</summary>
+    public static readonly Briefing SecondStory = new(
+        new BriefingId(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")),
+        "City to close aging Main Street bridge for a two-year replacement",
+        "The Riverside Wire",
+        "https://example.com/riverside/bridge-replacement",
+        "The city council voted to replace the 80-year-old Main Street bridge, the main route across the " +
+        "river, starting in spring. The bridge will be closed for about two years while a wider span is " +
+        "built, and drivers will be detoured several miles around. Officials say the old bridge is no " +
+        "longer safe; some residents worry the detour will hurt downtown shops and lengthen the commute " +
+        "for people on the east side.");
+
     public static SessionId Seed(
         ConversationStore store,
         SessionMode mode = SessionMode.FreshEncounter,
-        string modelConfigVersion = "stub/stub-digest")
+        string modelConfigVersion = "stub/stub-digest",
+        Briefing? briefing = null)
     {
+        var story = briefing ?? Story;
         foreach (var c in Cast) store.SaveCharacter(c);
-        store.SaveBriefing(Story);
+        store.SaveBriefing(story);
         var id = SessionId.New();
         store.CreateSession(new Session(
             id,
             Cast.Select(c => c.Id).ToList(),
             mode,
-            Story.Id,
+            story.Id,
             ProtocolVersion: ProtocolVersion,
             ModelConfigVersion: modelConfigVersion,
             ContextVersion: ContextVersion,

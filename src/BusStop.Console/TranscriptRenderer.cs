@@ -14,12 +14,14 @@ public static class TranscriptRenderer
     public static string RenderTranscript(ConversationStore store, SessionId session, IReadOnlyList<CharacterProfile> cast)
     {
         var nameById = cast.ToDictionary(c => c.Id, c => c.Name);
+        var sessionRecord = store.GetSession(session);
+        var briefing = sessionRecord is not null ? store.GetBriefing(sessionRecord.Briefing) : null;
         var sb = new StringBuilder();
 
         sb.AppendLine("# BusStop transcript");
         sb.AppendLine();
-        sb.AppendLine($"**Story:** {Laboratory.Story.Title} — {Laboratory.Story.Source}  ");
-        sb.AppendLine($"**Source:** {Laboratory.Story.Url}  ");
+        sb.AppendLine($"**Story:** {briefing?.Title} — {briefing?.Source}  ");
+        sb.AppendLine($"**Source:** {briefing?.Url}  ");
         sb.AppendLine($"**Participants:** {string.Join(", ", cast.Select(c => c.Name))}");
         sb.AppendLine();
         sb.AppendLine("---");
@@ -76,7 +78,7 @@ public static class TranscriptRenderer
                 protocolVersion = sessionRecord?.ProtocolVersion,
                 contextVersion = sessionRecord?.ContextVersion,
                 characters = Laboratory.Cast.Select(c => $"{c.Name} v{c.Version}").ToArray(),
-                briefingId = Laboratory.Story.Id.ToString(),
+                briefingId = sessionRecord?.Briefing.ToString(),
                 temperature = runConfig?.Temperature,
                 think = runConfig?.Think,
                 maxOpportunities = runConfig?.MaxOpportunities,

@@ -1,8 +1,12 @@
 {
   "profiles": {
+    "BusStop.Console (Memory demo)": {
+      "commandName": "Project",
+      "commandLineArgs": "--model ollama --ollama-model qwen3.5:9b --no-think --continuing"
+    },
     "BusStop.Console (Ollama)": {
       "commandName": "Project",
-      "commandLineArgs": "--model ollama --ollama-model qwen3:4b --no-think"
+      "commandLineArgs": "--model ollama --ollama-model qwen3.5:9b --no-think"
     },
     "BusStop.Console (stub demo)": {
       "commandName": "Project"

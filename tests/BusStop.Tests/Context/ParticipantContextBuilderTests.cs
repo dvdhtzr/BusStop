@@ -102,6 +102,27 @@ public class ParticipantContextBuilderTests
     }
 
     [Fact]
+    public void Continuing_context_includes_recollections_by_speaker_name()
+    {
+        var rec = new Recollection(ArthurId, SessionId.New(), UtteranceId.New(), 1, MayaId, "MEMORABLE_PRIOR_LINE");
+
+        var built = new ParticipantContextBuilder().Build(new ContextInputs(
+            Arthur, Room, Story, Array.Empty<Utterance>(), Opp(ArthurId, OpportunityReason.Opening), new[] { rec }));
+
+        Assert.Contains("When you last talked with them", built.Prompt);
+        Assert.Contains("Maya said: MEMORABLE_PRIOR_LINE", built.Prompt);
+    }
+
+    [Fact]
+    public void Fresh_context_has_no_recollection_section()
+    {
+        var built = new ParticipantContextBuilder().Build(new ContextInputs(
+            Arthur, Room, Story, Array.Empty<Utterance>(), Opp(ArthurId, OpportunityReason.Opening)));
+
+        Assert.DoesNotContain("When you last talked with them", built.Prompt);
+    }
+
+    [Fact]
     public void Addressable_participants_exclude_self()
     {
         var built = new ParticipantContextBuilder().Build(new ContextInputs(

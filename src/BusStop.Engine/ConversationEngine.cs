@@ -1,6 +1,7 @@
 using BusStop.Context;
 using BusStop.Coordinator;
 using BusStop.Domain;
+using BusStop.Memory;
 using BusStop.Models;
 using BusStop.Persistence;
 
@@ -42,6 +43,8 @@ public sealed class ConversationEngine
     private readonly EngineOptions _options;
     private readonly Func<DateTimeOffset> _clock;
     private readonly Action<string>? _trace;
+    private readonly RecollectionService? _recollections;
+    private readonly SessionMode _mode;
 
     private readonly FloorCoordinator _coordinator;
     private int _opportunityOrdinal;
@@ -56,7 +59,8 @@ public sealed class ConversationEngine
         Briefing briefing,
         EngineOptions? options = null,
         Func<DateTimeOffset>? clock = null,
-        Action<string>? trace = null)
+        Action<string>? trace = null,
+        RecollectionService? recollections = null)
     {
         _store = store;
         _model = model;
@@ -66,6 +70,8 @@ public sealed class ConversationEngine
         _options = options ?? new EngineOptions();
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _trace = trace;
+        _recollections = recollections;
+        _mode = store.GetSession(session)?.Mode ?? SessionMode.FreshEncounter;
         _handles = participants.Select(p => new ParticipantHandle(p.Id, p.Name)).ToList();
         _profiles = participants.ToDictionary(p => p.Id);
 
@@ -142,7 +148,14 @@ public sealed class ConversationEngine
         var self = _profiles[offer.Participant];
         _trace?.Invoke($"… {self.Name} has the floor ({offer.Reason}); thinking…");
         var history = _store.GetCommittedUtterances(_session);
-        var built = _builder.Build(new ContextInputs(self, _handles, _briefing, history, opportunity));
+
+        // In a continuing session, the speaker recalls evidence-linked lines from prior conversations
+        // among the same people. Fresh encounters carry no recollections.
+        IReadOnlyList<Recollection>? recollections = null;
+        if (_mode == SessionMode.Continuing && _recollections is not null)
+            recollections = _recollections.Recall(offer.Participant, _handles.Select(h => h.Id).ToList(), _session);
+
+        var built = _builder.Build(new ContextInputs(self, _handles, _briefing, history, opportunity, recollections));
 
         var validationContext = new ValidationContext(
             _handles.ToDictionary(h => h.Name, h => h.Id),

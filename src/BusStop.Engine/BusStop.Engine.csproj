@@ -6,6 +6,7 @@
     <ProjectReference Include="..\BusStop.Models\BusStop.Models.csproj" />
     <ProjectReference Include="..\BusStop.Context\BusStop.Context.csproj" />
     <ProjectReference Include="..\BusStop.Coordinator\BusStop.Coordinator.csproj" />
+    <ProjectReference Include="..\BusStop.Memory\BusStop.Memory.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
