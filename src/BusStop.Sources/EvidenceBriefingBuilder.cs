@@ -10,7 +10,7 @@ public static class EvidenceBriefingBuilder
 {
     public const int MaxExposedPassages = 4;
     public const string ContextVersion = "ctx-3-ending+doc-excerpts-v1";
-    public const string RetrievalContextVersion = "ctx-3-ending+doc-rag-lexical-v1";
+    public const string RetrievalContextVersion = EvidenceContextVersions.DynamicLexicalRetrieval;
 
     /// <summary>R1c does not expose any source passages in the static briefing.
     /// Each speaking turn receives a fresh, locally retrieved, auditable
