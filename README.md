@@ -13,8 +13,8 @@ integrity.
 selected story from **today's news** or an uploaded document understood through
 **local RAG retrieval**. The current plant and bridge stories are *fictional,
 frozen test fixtures*, not real news. R1a captures local source evidence; R1b
-introduces bounded document discussions. Actual on-demand RAG and live
-news selection remain future work. See
+introduces bounded document discussions. Local lexical RAG is now available through R1c;
+embedding-based semantic retrieval and live news selection remain future work. See
 [conversation source vision](docs/conversation-source-vision.md).
 
 ## Status
@@ -60,6 +60,23 @@ document-grounded conversation or perform RAG retrieval. See
 [the R1a design and test boundary](docs/real-content/r1a-evidence-snapshots.md).
 The existing conversation engine, prompts, and fictional lab scenarios
 remain unchanged.
+
+### R1c: Dynamic local lexical RAG
+
+Use the exact same imported local document with a new opt-in command.
+Unlike the R1b fixed four-passage briefing, R1c retrieves up to three
+relevant passages **before every speaking turn**, records the retrieval
+in SQLite, and reports the passage IDs in transcripts and diagnostics:
+
+```powershell
+dotnet run --project .\src\BusStop.Console --configuration Release -- `
+    --model ollama --ollama-model qwen3.5:9b --no-think `
+    --rag-document "C:\path\to\notes.md" --out "C:\path\to\result"
+```
+
+This is **local keyword/word-overlap retrieval**, not embeddings or
+semantic RAG. It can still miss relevant source content. See
+[R1c design and evaluation plan](docs/real-content/r1c-lexical-rag.md).
 
 ### R1b: Discuss a local document with Ollama
 
