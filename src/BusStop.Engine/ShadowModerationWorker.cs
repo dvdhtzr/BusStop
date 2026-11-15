@@ -262,16 +262,22 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
         sb.AppendLine();
         sb.AppendLine($"Proposed text (already committed, audit only): {c.Text}");
         sb.AppendLine();
-        sb.AppendLine("Return ONE JSON object with exactly this shape:");
-        sb.AppendLine("{\"contractVersion\":\"shadow-m1-v1\",\"candidateId\":\"<ID ABOVE>\",");
-        sb.AppendLine("\"disposition\":\"Accept|Advisory|RequestRevision|Abstain\",");
-        sb.AppendLine("\"severity\":\"None|Low|Medium|High\",");
-        sb.AppendLine("\"finding\":null OR {\"kind\":\"UnestablishedAutobiography|MisattributedExperience|UnsupportedFactualClaim|ContradictedFactualClaim|ExactDuplicate|SemanticRepetition|Other\",");
-        sb.AppendLine("\"claimSpan\":\"EXACT substring from proposed text\",\"explanation\":\"specific reason\",");
-        sb.AppendLine("\"evidenceReferences\":[\"one or more authorized IDs if making a firm objection\"],");
-        sb.AppendLine("\"uncertain\":false,\"narrowFeedback\":\"small corrective suggestion\"}}");
-        sb.AppendLine("If there is no finding: finding=null, severity=None, disposition=Accept.");
-        sb.AppendLine("A material issue must use an exact text span and authorized references.");
+        sb.AppendLine("Return ONE JSON object with the exact candidateId above.");
+        sb.AppendLine("When you find nothing material, return precisely this shape:");
+        sb.AppendLine("{\\"contractVersion\\":\\"shadow-m1-v1\\",\\"candidateId\\":\\"" + c.CandidateId.ToString("D") + "\\",");
+        sb.AppendLine("\\"disposition\\":\\"Accept\\",\\"severity\\":\\"None\\",\\"finding\\":null}");
+        sb.AppendLine("When a real issue exists, use the same top-level fields, but set");
+        sb.AppendLine("disposition to Advisory, RequestRevision, or Abstain;");
+        sb.AppendLine("severity to Low, Medium, or High; and finding to an object with:");
+        sb.AppendLine("\\"kind\\": one of UnestablishedAutobiography, MisattributedExperience,");
+        sb.AppendLine("UnsupportedFactualClaim, ContradictedFactualClaim, ExactDuplicate,");
+        sb.AppendLine("SemanticRepetition, Other;");
+        sb.AppendLine("\\"claimSpan\\": an EXACT substring of proposed text;");
+        sb.AppendLine("\\"explanation\\": a short specific reason;");
+        sb.AppendLine("\\"evidenceReferences\\": an array of authorized reference IDs;");
+        sb.AppendLine("\\"uncertain\\": true or false;");
+        sb.AppendLine("\\"narrowFeedback\\": a narrow suggestion string or null.");
+        sb.AppendLine("Never write replacement speech. Output JSON only.");
         return (sb.ToString(), refs.Distinct(StringComparer.Ordinal).ToArray());
     }
 

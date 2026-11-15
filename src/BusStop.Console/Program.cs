@@ -210,6 +210,15 @@ if (shadowMode)
         "shadow-m1-prompt-v1", moderatorAdapter.ModelName, moderatorAdapter.ModelDigest,
         0.1, false, moderatorBudget, 0, 0, 0);
     moderatorPolicy.Validate();
+    if (moderatorAdapter.ModelDigest == "unknown")
+    {
+        System.Console.Error.WriteLine(
+            $"Moderator model '{moderatorModelName}' was not found with a digest in Ollama. " +
+            "Check 'ollama list' before pinning a shadow session.");
+        moderatorAdapter.Dispose();
+        ollamaAdapter?.Dispose();
+        return 2;
+    }
     System.Console.WriteLine(
         $"[Moderator] SHADOW ONLY: {moderatorAdapter.ModelName}, " +
         $"budget {moderatorBudget} calls/session, periodic sample every " +
@@ -256,6 +265,7 @@ foreach (var (mode, label, briefing) in plan)
             Laboratory.Cast, briefing,
             store.GetSessionEvidence(session)?.ExposedPassageIds,
             sampleEvery: moderatorSampleEvery,
+            queueCapacity: 8,
             log: line => System.Console.WriteLine(
                 $"[{DateTime.Now:HH:mm:ss}] {line}"));
     }
