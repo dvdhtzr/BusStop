@@ -6,6 +6,20 @@ namespace BusStop.Persistence;
 
 public sealed partial class ConversationStore
 {
+    // Additive migration: pre-M1a private audits remain readable (null traces).
+    private void EnsureShadowAttemptColumn()
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(shadow_moderation_reviews);";
+        var exists = false;
+        using (var r = cmd.ExecuteReader())
+            while (r.Read())
+                if (r.GetString(1) == "attempts_json")
+                    exists = true;
+        if (!exists)
+            Execute("ALTER TABLE shadow_moderation_reviews ADD COLUMN attempts_json TEXT NULL;");
+    }
+
     /// <summary>Append-only private audit. An observation must match a real already
     /// committed utterance, including its exact original candidate text and boundary.</summary>
     public void AppendShadowReview(ShadowReviewRecord review)
@@ -62,12 +76,13 @@ public sealed partial class ConversationStore
                 (candidate_id, session_id, opportunity_id, utterance_id, speaker_id,
                  committed_boundary, candidate_text, trigger_kind, authorized_refs,
                  model_name, model_digest, request_id, review_status, judgment_json,
-                 severity, raw_response, failure_detail, recorded_at)
+                 severity, raw_response, failure_detail, recorded_at,
+                attempts_json)
             VALUES
                 (@candidate, @session, @opportunity, @utterance, @speaker,
                  @boundary, @text, @trigger, @authorized,
                  @model, @digest, @request, @status, @judgment,
-                 @severity, @raw, @failure, @at);
+                 @severity, @raw, @failure, @at, @attempts);
             """;
         cmd.Parameters.AddWithValue("@candidate", c.CandidateId.ToString("D"));
         cmd.Parameters.AddWithValue("@session", c.Session.ToString());
@@ -88,6 +103,8 @@ public sealed partial class ConversationStore
         cmd.Parameters.AddWithValue("@raw", (object?)review.RawResponse ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@failure", (object?)review.FailureDetail ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@at", review.RecordedAt.ToUniversalTime().ToString("O"));
+        cmd.Parameters.AddWithValue("@attempts", review.Attempts is null
+            ? DBNull.Value : JsonSerializer.Serialize(review.Attempts));
         cmd.ExecuteNonQuery();
     }
 
@@ -99,7 +116,8 @@ public sealed partial class ConversationStore
             SELECT candidate_id, opportunity_id, utterance_id, speaker_id,
                    committed_boundary, candidate_text, trigger_kind, authorized_refs,
                    model_name, model_digest, request_id, review_status, judgment_json,
-                   severity, raw_response, failure_detail, recorded_at
+                   severity, raw_response, failure_detail, recorded_at,
+                   attempts_json
             FROM shadow_moderation_reviews
             WHERE session_id = @session ORDER BY recorded_at, candidate_id;
             """;
@@ -125,7 +143,9 @@ public sealed partial class ConversationStore
                 Enum.Parse<ModeratorSeverity>(reader.GetString(13)),
                 reader.IsDBNull(14) ? null : reader.GetString(14),
                 reader.IsDBNull(15) ? null : reader.GetString(15),
-                DateTimeOffset.Parse(reader.GetString(16))));
+                DateTimeOffset.Parse(reader.GetString(16)),
+                reader.IsDBNull(17) ? null :
+                    JsonSerializer.Deserialize<ShadowInferenceTrace[]>(reader.GetString(17))));
         }
         return reviews.AsReadOnly();
     }

@@ -87,7 +87,8 @@ internal static class Schema
             severity            TEXT NOT NULL,
             raw_response        TEXT NULL,
             failure_detail      TEXT NULL,
-            recorded_at         TEXT NOT NULL
+            recorded_at         TEXT NOT NULL,
+            attempts_json       TEXT NULL
         );
 
         CREATE TABLE IF NOT EXISTS session_participants (
