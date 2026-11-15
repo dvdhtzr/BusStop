@@ -132,7 +132,7 @@ foreach (var (mode, label, briefing) in plan)
     lastDiagnostics = diagnostics;
 
     // Every run has its own transcript and diagnostics, even in a batch.
-    RunArtifactWriter.WriteRun(outDir, runIndex, transcript, diagnostics);
+    RunArtifactWriter.WriteRun(outDir, runIndex, session, transcript, diagnostics);
 
     summary.AppendLine($"| {label} | {result.Reason} | {result.Opportunities} | {committed} |");
     runSections.AppendLine($"## {label}");
