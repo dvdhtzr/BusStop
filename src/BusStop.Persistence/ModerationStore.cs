@@ -143,6 +143,8 @@ public sealed partial class ConversationStore
             {
                 if (saved.Session != session || saved.Opportunity != opportunity || saved.Purpose != purpose)
                     throw new InvalidOperationException("Moderator reservation ID reused with different scope.");
+                if (saved.Status != ModerationAttemptStatus.Reserved)
+                    throw new InvalidOperationException("Finalized moderator attempts cannot authorize new dispatch.");
                 tx.Commit();
                 return saved;
             }

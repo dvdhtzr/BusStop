@@ -103,6 +103,30 @@ public sealed class ModerationFoundationTests : IDisposable
     }
 
     [Fact]
+    public void Existing_pre_m0_database_schema_is_upgraded_additively()
+    {
+        // Legacy sessions table has no moderation marker at all.
+        ExecuteSql("""
+            CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                mode TEXT NOT NULL,
+                briefing_id TEXT NOT NULL,
+                protocol_version TEXT NOT NULL,
+                model_config_version TEXT NOT NULL,
+                context_version TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                ended_at TEXT NULL
+            );
+            """);
+
+        using var store = Open();
+        var id = Seed(store);
+        Assert.Equal(ModerationSessionPolicy.Disabled, store.GetModerationPolicy(id));
+        Assert.Single(store.GetSession(id)!.Participants.Take(1));
+    }
+
+    [Fact]
     public void Pre_moderation_sessions_remain_legacy_disabled_after_migration()
     {
         SessionId id;
