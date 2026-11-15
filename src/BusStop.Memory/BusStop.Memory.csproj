@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BusStop.Domain\BusStop.Domain.csproj" />
     <ProjectReference Include="..\BusStop.Persistence\BusStop.Persistence.csproj" />
+    <ProjectReference Include="..\BusStop.Models\BusStop.Models.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

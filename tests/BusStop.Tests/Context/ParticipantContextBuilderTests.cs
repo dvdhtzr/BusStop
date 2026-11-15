@@ -114,6 +114,19 @@ public class ParticipantContextBuilderTests
     }
 
     [Fact]
+    public void Continuing_context_includes_private_impressions()
+    {
+        var imp = new Impression(ArthurId, MayaId, SessionId.New(), "Maya is an optimist.", DateTimeOffset.UtcNow);
+
+        var built = new ParticipantContextBuilder().Build(new ContextInputs(
+            Arthur, Room, Story, Array.Empty<Utterance>(), Opp(ArthurId, OpportunityReason.Opening),
+            Recollections: null, Impressions: new[] { imp }));
+
+        Assert.Contains("What you make of them", built.Prompt);
+        Assert.Contains("Maya: Maya is an optimist.", built.Prompt);
+    }
+
+    [Fact]
     public void Fresh_context_has_no_recollection_section()
     {
         var built = new ParticipantContextBuilder().Build(new ContextInputs(

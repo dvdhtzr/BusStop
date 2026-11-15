@@ -44,6 +44,7 @@ public sealed class ConversationEngine
     private readonly Func<DateTimeOffset> _clock;
     private readonly Action<string>? _trace;
     private readonly RecollectionService? _recollections;
+    private readonly ImpressionService? _impressions;
     private readonly SessionMode _mode;
 
     private readonly FloorCoordinator _coordinator;
@@ -60,7 +61,8 @@ public sealed class ConversationEngine
         EngineOptions? options = null,
         Func<DateTimeOffset>? clock = null,
         Action<string>? trace = null,
-        RecollectionService? recollections = null)
+        RecollectionService? recollections = null,
+        ImpressionService? impressions = null)
     {
         _store = store;
         _model = model;
@@ -71,6 +73,7 @@ public sealed class ConversationEngine
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _trace = trace;
         _recollections = recollections;
+        _impressions = impressions;
         _mode = store.GetSession(session)?.Mode ?? SessionMode.FreshEncounter;
         _handles = participants.Select(p => new ParticipantHandle(p.Id, p.Name)).ToList();
         _profiles = participants.ToDictionary(p => p.Id);
@@ -152,10 +155,17 @@ public sealed class ConversationEngine
         // In a continuing session, the speaker recalls evidence-linked lines from prior conversations
         // among the same people. Fresh encounters carry no recollections.
         IReadOnlyList<Recollection>? recollections = null;
-        if (_mode == SessionMode.Continuing && _recollections is not null)
-            recollections = _recollections.Recall(offer.Participant, _handles.Select(h => h.Id).ToList(), _session);
+        IReadOnlyList<Impression>? impressions = null;
+        if (_mode == SessionMode.Continuing)
+        {
+            if (_recollections is not null)
+                recollections = _recollections.Recall(offer.Participant, _handles.Select(h => h.Id).ToList(), _session);
+            if (_impressions is not null)
+                impressions = _impressions.ImpressionsFor(
+                    offer.Participant, _handles.Where(h => h.Id != offer.Participant).Select(h => h.Id).ToList());
+        }
 
-        var built = _builder.Build(new ContextInputs(self, _handles, _briefing, history, opportunity, recollections));
+        var built = _builder.Build(new ContextInputs(self, _handles, _briefing, history, opportunity, recollections, impressions));
 
         var validationContext = new ValidationContext(
             _handles.ToDictionary(h => h.Name, h => h.Id),

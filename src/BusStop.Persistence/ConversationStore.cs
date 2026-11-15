@@ -323,6 +323,45 @@ public sealed class ConversationStore : IDisposable
         return new CharacterProfile(id, version, r.GetString(0), r.GetString(1), traits);
     }
 
+    public void SaveImpression(Impression impression)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT OR REPLACE INTO impressions (owner, subject, source_session, content, formed_at)
+            VALUES (@owner, @subject, @session, @content, @formed);
+            """;
+        cmd.Parameters.AddWithValue("@owner", impression.Owner.ToString());
+        cmd.Parameters.AddWithValue("@subject", impression.Subject.ToString());
+        cmd.Parameters.AddWithValue("@session", impression.SourceSession.ToString());
+        cmd.Parameters.AddWithValue("@content", impression.Content);
+        cmd.Parameters.AddWithValue("@formed", Iso(impression.FormedAt));
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>All impressions held by one owner, most recent first.</summary>
+    public IReadOnlyList<Impression> GetImpressions(CharacterId owner)
+    {
+        var result = new List<Impression>();
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT subject, source_session, content, formed_at
+            FROM impressions WHERE owner = @owner ORDER BY formed_at DESC;
+            """;
+        cmd.Parameters.AddWithValue("@owner", owner.ToString());
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            result.Add(new Impression(
+                owner,
+                CharacterId.Parse(r.GetString(0)),
+                SessionId.Parse(r.GetString(1)),
+                r.GetString(2),
+                DateTimeOffset.Parse(r.GetString(3))));
+        }
+
+        return result;
+    }
+
     public Briefing? GetBriefing(BriefingId id)
     {
         using var cmd = _connection.CreateCommand();

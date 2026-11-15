@@ -14,7 +14,8 @@ public sealed record ContextInputs(
     Briefing Briefing,
     IReadOnlyList<Utterance> CommittedHistory,
     SpeakingOpportunity Opportunity,
-    IReadOnlyList<Recollection>? Recollections = null);
+    IReadOnlyList<Recollection>? Recollections = null,
+    IReadOnlyList<Impression>? Impressions = null);
 
 /// <summary>The result of building a context: the prompt to send, the participants this speaker may
 /// address, the committed utterances it may reference, and who it is. The engine turns this into a
@@ -86,6 +87,19 @@ public sealed class ParticipantContextBuilder
             {
                 var who = nameById.TryGetValue(rec.Speaker, out var rn) ? rn : "Someone";
                 sb.AppendLine($"- {who} said: {rec.Content}");
+            }
+            sb.AppendLine();
+        }
+
+        var impressions = inputs.Impressions ?? Array.Empty<Impression>();
+        if (impressions.Count > 0)
+        {
+            sb.AppendLine("# What you make of them");
+            sb.AppendLine("From talking with them before, this is your own private sense of them — it is yours alone; they cannot hear it. Let it colour how you read them, not what you say outright:");
+            foreach (var imp in impressions)
+            {
+                var who = nameById.TryGetValue(imp.Subject, out var sn) ? sn : "Someone";
+                sb.AppendLine($"- {who}: {imp.Content}");
             }
             sb.AppendLine();
         }

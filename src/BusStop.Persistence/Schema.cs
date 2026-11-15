@@ -75,6 +75,15 @@ internal static class Schema
             attempt_id     TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS impressions (
+            owner          TEXT NOT NULL,
+            subject        TEXT NOT NULL,
+            source_session TEXT NOT NULL,
+            content        TEXT NOT NULL,
+            formed_at      TEXT NOT NULL,
+            PRIMARY KEY (owner, subject, source_session)
+        );
+
         CREATE TABLE IF NOT EXISTS utterances (
             id             TEXT PRIMARY KEY,
             session_id     TEXT NOT NULL,

@@ -87,6 +87,28 @@ public sealed class RecollectionEngineTests : IDisposable
         Assert.DoesNotContain(client.Prompts, p => p.Contains("When you last talked with them"));
     }
 
+    [Fact]
+    public void Continuing_session_loads_private_impressions_without_leaking_them_to_the_subject()
+    {
+        using var store = Open();
+        var prior = SeedSession(store, SessionMode.FreshEncounter, SessionStatus.Ended);
+        // Arthur's private impression of Maya.
+        store.SaveImpression(new Impression(Arthur.Id, Maya.Id, prior, "Maya is relentlessly hopeful.", DateTimeOffset.UtcNow));
+        var session = SeedSession(store, SessionMode.Continuing, SessionStatus.Active);
+
+        var client = new CapturingClient();
+        new ConversationEngine(
+            store, client, new ParticipantContextBuilder(), session, Cast, Story,
+            impressions: new ImpressionService(store)).Run();
+
+        // Arthur's own prompts carry his private read of Maya...
+        Assert.Contains(client.Prompts, p => p.Contains("Arthur. A machinist.")
+            && p.Contains("What you make of them") && p.Contains("Maya is relentlessly hopeful."));
+
+        // ...but it never appears in Maya's prompts (it is private to Arthur).
+        Assert.DoesNotContain(client.Prompts, p => p.Contains("Maya. A nurse.") && p.Contains("Maya is relentlessly hopeful."));
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();

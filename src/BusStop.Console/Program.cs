@@ -92,6 +92,7 @@ store.InitializeSchema();
 // same characters that can recall it. Otherwise run N independent fresh conversations.
 var continuing = argv.Contains("--continuing");
 var recollectionService = new RecollectionService(store);
+var impressionService = new ImpressionService(store);
 
 var plan = continuing
     ? new[]
@@ -120,7 +121,15 @@ foreach (var (mode, label, briefing) in plan)
     var result = new ConversationEngine(
         store, client, new BusStop.Context.ParticipantContextBuilder(), session,
         Laboratory.Cast, briefing, engineOptions, trace: trace,
-        recollections: mode == SessionMode.Continuing ? recollectionService : null).Run();
+        recollections: mode == SessionMode.Continuing ? recollectionService : null,
+        impressions: mode == SessionMode.Continuing ? impressionService : null).Run();
+
+    // Reflect so a later continuing conversation carries each character's sense of the others.
+    if (continuing)
+    {
+        trace?.Invoke("… (reflecting on the conversation)");
+        impressionService.Reflect(session, makeClient(), Laboratory.Cast);
+    }
 
     var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
     var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest, runConfig);
