@@ -110,9 +110,11 @@ summary.AppendLine("| --- | --- | --- | --- |");
 
 string lastTranscript = string.Empty;
 string lastDiagnostics = string.Empty;
+var runIndex = 0;
 
 foreach (var (mode, label, briefing) in plan)
 {
+    runIndex++;
     if (plan.Length > 1) System.Console.WriteLine($"\n==== {label} ====");
 
     var client = makeClient();
@@ -128,6 +130,9 @@ foreach (var (mode, label, briefing) in plan)
 
     lastTranscript = transcript;
     lastDiagnostics = diagnostics;
+
+    // Every run has its own transcript and diagnostics, even in a batch.
+    RunArtifactWriter.WriteRun(outDir, runIndex, transcript, diagnostics);
 
     summary.AppendLine($"| {label} | {result.Reason} | {result.Opportunities} | {committed} |");
     runSections.AppendLine($"## {label}");
