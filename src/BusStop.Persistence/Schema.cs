@@ -52,7 +52,8 @@ internal static class Schema
             max_moderator_calls         INTEGER NOT NULL,
             max_revisions               INTEGER NOT NULL,
             stagnation_window           INTEGER NOT NULL,
-            nudge_cooldown              INTEGER NOT NULL
+            nudge_cooldown              INTEGER NOT NULL,
+            shadow_sample_every         INTEGER NOT NULL DEFAULT 0
         );
 
         -- Reserved before future inference dispatch. Reserved/interrupted attempts

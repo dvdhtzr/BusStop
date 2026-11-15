@@ -63,7 +63,8 @@ public sealed record ModerationSessionPolicy(
     int MaxModeratorCalls,
     int MaxRevisionsPerOpportunity,
     int StagnationWindow,
-    int NudgeCooldownOpportunities)
+    int NudgeCooldownOpportunities,
+    int ShadowSampleEvery = 0)
 {
     public const string CurrentContractVersion = "moderation-m0-v1";
 
@@ -81,7 +82,8 @@ public sealed record ModerationSessionPolicy(
         if (string.IsNullOrWhiteSpace(RuleVersion) || string.IsNullOrWhiteSpace(PromptVersion) ||
             RuleVersion.Length > 128 || PromptVersion.Length > 128 ||
             MaxModeratorCalls < 0 || MaxRevisionsPerOpportunity is < 0 or > 1 ||
-            StagnationWindow < 0 || NudgeCooldownOpportunities < 0)
+            StagnationWindow < 0 || NudgeCooldownOpportunities < 0 ||
+            ShadowSampleEvery is < 0 or > 1000)
             throw new InvalidOperationException("Invalid moderation policy limits or versions.");
 
         if (Mode == ModerationOperatingMode.Disabled)
@@ -89,7 +91,7 @@ public sealed record ModerationSessionPolicy(
             if (ModelName is not null || ModelDigest is not null || Temperature is not null ||
                 Think is not null || MaxModeratorCalls != 0 ||
                 MaxRevisionsPerOpportunity != 0 || StagnationWindow != 0 ||
-                NudgeCooldownOpportunities != 0)
+                NudgeCooldownOpportunities != 0 || ShadowSampleEvery != 0)
                 throw new InvalidOperationException("Disabled moderation cannot reserve model resources.");
         }
         else if (string.IsNullOrWhiteSpace(ModelName) ||

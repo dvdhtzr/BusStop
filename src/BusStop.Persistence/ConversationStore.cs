@@ -26,6 +26,7 @@ public sealed partial class ConversationStore : IDisposable
     {
         Execute(Schema.Ddl);
         EnsureModerationMarkerColumn(); // add-only migration for older SQLite databases
+        EnsureShadowSamplingColumn();
     }
 
     // --- writes -------------------------------------------------------------

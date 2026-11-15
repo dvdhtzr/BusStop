@@ -114,7 +114,8 @@ public sealed class ShadowModeratorTests : IDisposable
             ModelDigest = "local-digest",
             Temperature = 0.1,
             Think = false,
-            MaxModeratorCalls = calls
+            MaxModeratorCalls = calls,
+            ShadowSampleEvery = 1
         };
 
     [Fact]

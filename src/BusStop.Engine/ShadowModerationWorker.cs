@@ -41,6 +41,8 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
     {
         if (policy.Mode != ModerationOperatingMode.Shadow)
             throw new InvalidOperationException("Shadow worker requires a shadow policy.");
+        if (policy.ShadowSampleEvery != sampleEvery)
+            throw new InvalidOperationException("Shadow sampling must match pinned session policy.");
         if (sampleEvery is < 1 or > 1000 || queueCapacity is < 1 or > 64)
             throw new ArgumentOutOfRangeException(nameof(sampleEvery));
         if (moderatorModel.ModelName != policy.ModelName ||

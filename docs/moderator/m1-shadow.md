@@ -4,6 +4,10 @@ M1 is opt-in, independent from the participant model. It uses a pinned
 session policy and a second Ollama adapter. The host continues to commit
 valid participant speech without waiting for moderator inference.
 
+The periodic sampling interval is pinned in the same immutable SQLite session
+policy as the moderator model/budget. Older M0 policy rows receive an additive,
+backward-compatible default and cannot silently enter active M1 sampling.
+
 A bounded single-reader, nonblocking queue receives a copy of a *committed*
 SPEAK. The worker uses a separate SQLite connection and selects periodic
 samples plus detected personal-history, third-party-attribution, numerical
