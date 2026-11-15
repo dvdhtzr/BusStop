@@ -87,5 +87,36 @@ internal static class Schema
             committed_at   TEXT NOT NULL,
             UNIQUE (session_id, sequence)
         );
+        -- Source snapshots are separate from interpersonal recollections.
+        -- The existing session/briefing tables remain unchanged.
+        CREATE TABLE IF NOT EXISTS evidence_snapshots (
+            id             TEXT PRIMARY KEY,
+            kind           TEXT NOT NULL,
+            title          TEXT NOT NULL,
+            source_name    TEXT NOT NULL,
+            source_url     TEXT NULL,
+            published_at   TEXT NULL,
+            rights_basis   TEXT NOT NULL,
+            text_sha256    TEXT NOT NULL,
+            captured_at    TEXT NOT NULL,
+            snapshot_text  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS evidence_passages (
+            snapshot_id    TEXT NOT NULL REFERENCES evidence_snapshots(id),
+            ordinal        INTEGER NOT NULL,
+            passage_id     TEXT NOT NULL UNIQUE,
+            start_offset   INTEGER NOT NULL,
+            length         INTEGER NOT NULL,
+            text           TEXT NOT NULL,
+            PRIMARY KEY (snapshot_id, ordinal)
+        );
+
+        CREATE TABLE IF NOT EXISTS session_evidence (
+            session_id     TEXT PRIMARY KEY REFERENCES sessions(id),
+            snapshot_id    TEXT NOT NULL REFERENCES evidence_snapshots(id),
+            briefing_id    TEXT NOT NULL REFERENCES briefings(id),
+            passage_ids    TEXT NOT NULL
+        );
         """;
 }
