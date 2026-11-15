@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BusStop.Domain\BusStop.Domain.csproj" />
+    <ProjectReference Include="..\..\src\BusStop.Moderation\BusStop.Moderation.csproj" />
     <ProjectReference Include="..\..\src\BusStop.Persistence\BusStop.Persistence.csproj" />
     <ProjectReference Include="..\..\src\BusStop.Models\BusStop.Models.csproj" />
     <ProjectReference Include="..\..\src\BusStop.Context\BusStop.Context.csproj" />

@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BusStop.Memory", "src\BusSt
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BusStop.Sources", "src\BusStop.Sources\BusStop.Sources.csproj", "{8E4CB8E5-A8C7-43F3-8669-B6541FC4EAF6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BusStop.Moderation", "src\BusStop.Moderation\BusStop.Moderation.csproj", "{D7050610-30D7-48B8-A974-272672AF47D2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,6 +40,10 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D7050610-30D7-48B8-A974-272672AF47D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7050610-30D7-48B8-A974-272672AF47D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7050610-30D7-48B8-A974-272672AF47D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7050610-30D7-48B8-A974-272672AF47D2}.Release|Any CPU.Build.0 = Release|Any CPU
 		{1789A6EF-AB0A-42A5-9359-7CF6499E9182}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{1789A6EF-AB0A-42A5-9359-7CF6499E9182}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1789A6EF-AB0A-42A5-9359-7CF6499E9182}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -84,6 +90,7 @@ Global
 		{8E4CB8E5-A8C7-43F3-8669-B6541FC4EAF6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{D7050610-30D7-48B8-A974-272672AF47D2} = {6B4E386C-BA0E-42D4-977B-FB2471DF95D6}
 		{1789A6EF-AB0A-42A5-9359-7CF6499E9182} = {6B4E386C-BA0E-42D4-977B-FB2471DF95D6}
 		{CB786C2C-EC7F-4249-AB9C-99923F6DC9FC} = {6B4E386C-BA0E-42D4-977B-FB2471DF95D6}
 		{C5608151-BC02-4167-BDD4-1F187B5233D5} = {6B4E386C-BA0E-42D4-977B-FB2471DF95D6}
