@@ -127,15 +127,20 @@ public sealed partial class ConversationStore
                 FROM moderator_inference_reservations WHERE request_id = @id;
                 """;
             existingCmd.Parameters.AddWithValue("@id", requestId.ToString("D"));
-            using var reader = existingCmd.ExecuteReader();
-            if (reader.Read())
+            ModeratorInferenceReservation? saved = null;
+            using (var reader = existingCmd.ExecuteReader())
             {
-                var saved = new ModeratorInferenceReservation(
-                    requestId, SessionId.Parse(reader.GetString(0)),
-                    reader.IsDBNull(1) ? null : OpportunityId.Parse(reader.GetString(1)),
-                    Enum.Parse<ModerationInferencePurpose>(reader.GetString(2)),
-                    Enum.Parse<ModerationAttemptStatus>(reader.GetString(3)),
-                    DateTimeOffset.Parse(reader.GetString(4)));
+                if (reader.Read())
+                    saved = new ModeratorInferenceReservation(
+                        requestId, SessionId.Parse(reader.GetString(0)),
+                        reader.IsDBNull(1) ? null : OpportunityId.Parse(reader.GetString(1)),
+                        Enum.Parse<ModerationInferencePurpose>(reader.GetString(2)),
+                        Enum.Parse<ModerationAttemptStatus>(reader.GetString(3)),
+                        DateTimeOffset.Parse(reader.GetString(4)));
+            }
+
+            if (saved is not null)
+            {
                 if (saved.Session != session || saved.Opportunity != opportunity || saved.Purpose != purpose)
                     throw new InvalidOperationException("Moderator reservation ID reused with different scope.");
                 tx.Commit();
