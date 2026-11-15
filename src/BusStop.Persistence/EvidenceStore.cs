@@ -47,7 +47,16 @@ public sealed partial class ConversationStore
                 throw new InvalidDataException("Evidence passage does not match its source offsets.");
         }
 
-        using (var tx = _connection.BeginTransaction())
+        // Never modify an existing snapshot's passages, even when the same
+        // source metadata/text is imported with a different chunking algorithm.
+        var existing = GetEvidenceSnapshot(snapshot.SnapshotId);
+        if (existing is not null)
+        {
+            RequireIdentical(existing, snapshot);
+            return;
+        }
+
+        using (var tx = _connection.BeginTransaction(deferred: false))
         {
             using (var cmd = _connection.CreateCommand())
             {
@@ -58,7 +67,7 @@ public sealed partial class ConversationStore
                          rights_basis, text_sha256, captured_at, snapshot_text)
                     VALUES (@id, @kind, @title, @name, @url, @published,
                             @rights, @sha, @captured, @text)
-                    ON CONFLICT(id) DO NOTHING;
+                    ;
                     """;
                 cmd.Parameters.AddWithValue("@id", snapshot.SnapshotId);
                 cmd.Parameters.AddWithValue("@kind", snapshot.Descriptor.Kind.ToString());
@@ -83,7 +92,7 @@ public sealed partial class ConversationStore
                     INSERT INTO evidence_passages
                         (snapshot_id, ordinal, passage_id, start_offset, length, text)
                     VALUES (@snapshot, @ordinal, @id, @offset, @length, @text)
-                    ON CONFLICT(snapshot_id, ordinal) DO NOTHING;
+                    ;
                     """;
                 cmd.Parameters.AddWithValue("@snapshot", snapshot.SnapshotId);
                 cmd.Parameters.AddWithValue("@ordinal", passage.Ordinal);
@@ -98,10 +107,15 @@ public sealed partial class ConversationStore
 
         var stored = GetEvidenceSnapshot(snapshot.SnapshotId)
             ?? throw new InvalidDataException("Evidence snapshot could not be read back.");
-        if (stored.Descriptor != snapshot.Descriptor ||
-            stored.TextSha256 != snapshot.TextSha256 ||
-            stored.SnapshotText != snapshot.SnapshotText ||
-            !stored.Passages.SequenceEqual(snapshot.Passages))
+        RequireIdentical(stored, snapshot);
+    }
+
+    private static void RequireIdentical(EvidenceSnapshot stored, EvidenceSnapshot incoming)
+    {
+        if (stored.Descriptor != incoming.Descriptor ||
+            stored.TextSha256 != incoming.TextSha256 ||
+            stored.SnapshotText != incoming.SnapshotText ||
+            !stored.Passages.SequenceEqual(incoming.Passages))
             throw new InvalidOperationException(
                 "Evidence snapshot identity was reused with different content or passages.");
     }
