@@ -47,6 +47,7 @@ public sealed class ConversationEngine
     private readonly RecollectionService? _recollections;
     private readonly SessionMode _mode;
     private readonly ModerationSessionPolicy _moderationPolicy;
+    private readonly IShadowModerationSink? _shadowSink;
 
     private readonly FloorCoordinator _coordinator;
     private int _opportunityOrdinal;
@@ -62,7 +63,8 @@ public sealed class ConversationEngine
         EngineOptions? options = null,
         Func<DateTimeOffset>? clock = null,
         Action<string>? trace = null,
-        RecollectionService? recollections = null)
+        RecollectionService? recollections = null,
+        IShadowModerationSink? shadowSink = null)
     {
         _store = store;
         _model = model;
@@ -75,9 +77,14 @@ public sealed class ConversationEngine
         _recollections = recollections;
         _mode = store.GetSession(session)?.Mode ?? SessionMode.FreshEncounter;
         _moderationPolicy = store.GetModerationPolicy(session);
-        // M0 defines future modes but must never activate unimplemented moderation.
-        if (_moderationPolicy.Mode != ModerationOperatingMode.Disabled)
-            throw new InvalidOperationException("Only disabled moderation is supported in M0.");
+        // M1 observes committed speech asynchronously. Enforcement remains forbidden.
+        if (_moderationPolicy.Mode is not (ModerationOperatingMode.Disabled or ModerationOperatingMode.Shadow))
+            throw new InvalidOperationException("Enforcement is not supported before Gate A.");
+        if (_moderationPolicy.Mode == ModerationOperatingMode.Shadow && shadowSink is null)
+            throw new InvalidOperationException("Shadow sessions need an explicit nonblocking observer.");
+        if (_moderationPolicy.Mode == ModerationOperatingMode.Disabled && shadowSink is not null)
+            throw new InvalidOperationException("A disabled session cannot observe private candidates.");
+        _shadowSink = shadowSink;
         _handles = participants.Select(p => new ParticipantHandle(p.Id, p.Name)).ToList();
         _profiles = participants.ToDictionary(p => p.Id);
 
@@ -206,6 +213,7 @@ public sealed class ConversationEngine
             _trace?.Invoke($"    attempt {i + 1} failed ({decision.Outcome}); raw: {Snippet(response.RawJson)}");
         }
 
+        ShadowObservation? completedObservation = null;
         switch (decision.Outcome)
         {
             case AttemptOutcome.ValidSpeak:
@@ -229,6 +237,8 @@ public sealed class ConversationEngine
                     opportunityId, offer.Participant, DecisionAction.Speak, decision.Addressee, repliesTo, lastAttempt));
                 _coordinator.RecordSpoke(utterance.Id, offer.Participant, decision.Addressee);
                 _trace?.Invoke($"  {self.Name}: {decision.Text}");
+                if (_shadowSink is not null)
+                    completedObservation = new ShadowObservation(candidate, utterance.Id, history.ToArray());
                 break;
 
             case AttemptOutcome.ValidPass:
@@ -246,5 +256,22 @@ public sealed class ConversationEngine
         }
 
         _store.UpdateOpportunityStatus(opportunityId, OpportunityStatus.Decided);
+
+        // A post-commit, nonblocking notification only. No observer may approve,
+        // delay or veto this already-authoritative participant outcome.
+        if (completedObservation is { } observed && _shadowSink is not null)
+        {
+            try
+            {
+                if (!_shadowSink.TryObserve(observed))
+                    _trace?.Invoke("  [Moderator] shadow observation skipped (queue full).");
+            }
+            catch (Exception ex)
+            {
+                // Observation failure never becomes participant failure or silence.
+                try { _trace?.Invoke($"  [Moderator] observer error: {ex.Message}"); }
+                catch { /* Trace is observational, too. */ }
+            }
+        }
     }
 }
