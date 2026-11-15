@@ -1,3 +1,4 @@
+using BusStop.Moderation;
 using System.Text.Json;
 using BusStop.Domain;
 using Microsoft.Data.Sqlite;
@@ -24,6 +25,7 @@ public sealed partial class ConversationStore : IDisposable
     public void InitializeSchema()
     {
         Execute(Schema.Ddl);
+        EnsureModerationMarkerColumn(); // add-only migration for older SQLite databases
     }
 
     // --- writes -------------------------------------------------------------
@@ -80,16 +82,18 @@ public sealed partial class ConversationStore : IDisposable
                 $"Briefing {b.Id} is immutable; changed content needs a new ID.");
     }
 
-    public void CreateSession(Session s)
+    public void CreateSession(Session s, ModerationSessionPolicy? moderationPolicy = null)
     {
+        var effectivePolicy = moderationPolicy ?? ModerationSessionPolicy.Disabled;
+        effectivePolicy.Validate();
         using var tx = _connection.BeginTransaction();
         using (var cmd = _connection.CreateCommand())
         {
             cmd.Transaction = tx;
             cmd.CommandText = """
                 INSERT INTO sessions (id, mode, briefing_id, protocol_version, model_config_version,
-                    context_version, status, created_at, ended_at)
-                VALUES (@id, @mode, @briefing, @protocol, @model, @context, @status, @created, @ended);
+                    context_version, status, created_at, ended_at, moderation_policy_marker)
+                VALUES (@id, @mode, @briefing, @protocol, @model, @context, @status, @created, @ended, @moderation);
                 """;
             cmd.Parameters.AddWithValue("@id", s.Id.ToString());
             cmd.Parameters.AddWithValue("@mode", s.Mode.ToString());
@@ -97,6 +101,7 @@ public sealed partial class ConversationStore : IDisposable
             cmd.Parameters.AddWithValue("@protocol", s.ProtocolVersion);
             cmd.Parameters.AddWithValue("@model", s.ModelConfigVersion);
             cmd.Parameters.AddWithValue("@context", s.ContextVersion);
+            cmd.Parameters.AddWithValue("@moderation", effectivePolicy.ContractVersion);
             cmd.Parameters.AddWithValue("@status", s.Status.ToString());
             cmd.Parameters.AddWithValue("@created", Iso(s.CreatedAt));
             cmd.Parameters.AddWithValue("@ended", (object?)(s.EndedAt is { } e ? Iso(e) : null) ?? DBNull.Value);
@@ -117,6 +122,7 @@ public sealed partial class ConversationStore : IDisposable
             cmd.ExecuteNonQuery();
         }
 
+        InsertModerationPolicy(tx, s.Id, effectivePolicy);
         tx.Commit();
     }
 
