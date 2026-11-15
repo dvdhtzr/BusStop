@@ -1,7 +1,7 @@
 # BusStop
 
-Three fictional people sit together at a bus stop, receive the same factual briefing
-about a real news story, and talk. What follows should emerge from their individual
+Three fictional people sit together at a bus stop, receive common source material
+from a news story or document, and talk. What follows should emerge from their individual
 personalities and their responses to one another — not from a script.
 
 This is a local-first, multi-agent conversational experiment. The objective is a
