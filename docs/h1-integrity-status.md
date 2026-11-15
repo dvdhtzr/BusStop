@@ -14,8 +14,9 @@ character prompts, turn selection, natural-end thresholds, or the archived basel
   deterministic coordinator expectations, failing closed on mismatch.
 - Continuing sessions can only recall completed prior sessions that ended no later
   than the continuing encounter's creation time.
-- Each laboratory run writes a separately named transcript and diagnostics file,
-  while retaining the existing convenience files and combined batch report.
+- Each laboratory run writes a session-ID-specific transcript and diagnostics file
+  without overwriting prior run evidence, while retaining the existing convenience
+  files and combined batch report.
 
 ## Important remaining limitations
 
