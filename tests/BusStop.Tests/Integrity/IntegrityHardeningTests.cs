@@ -192,16 +192,45 @@ public sealed class IntegrityHardeningTests : IDisposable
                 var transcript = TranscriptRenderer.RenderTranscript(store, id, new[] { _a, _b, _c });
                 var diagnostics = TranscriptRenderer.RenderDiagnostics(store, id, result,
                     "stub", "stub-digest");
-                RunArtifactWriter.WriteRun(output, i, transcript, diagnostics);
+                RunArtifactWriter.WriteRun(output, i, id, transcript, diagnostics);
                 using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(output,
-                    $"run-{i:00}.diagnostics.json")));
+                    $"run-{i:00}-{id}.diagnostics.json")));
                 Assert.Equal(id.ToString(), json.RootElement.GetProperty("session").GetString());
                 Assert.Equal("NoEngagement", json.RootElement.GetProperty("termination").GetString());
                 Assert.Contains("# BusStop transcript", File.ReadAllText(Path.Combine(output,
-                    $"run-{i:00}.transcript.md")));
+                    $"run-{i:00}-{id}.transcript.md")));
             }
             Assert.Equal(3, Directory.GetFiles(output, "*.diagnostics.json").Length);
             Assert.Equal(3, Directory.GetFiles(output, "*.transcript.md").Length);
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Reusing_output_directory_preserves_old_batch_and_refuses_duplicate_writes()
+    {
+        var output = Path.Combine(Path.GetTempPath(), $"busstop-h1-archive-{Guid.NewGuid():N}");
+        try
+        {
+            var first = SessionId.New();
+            var second = SessionId.New();
+            RunArtifactWriter.WriteRun(output, 1, first, "FIRST TRANSCRIPT", "{\"run\":1}");
+            RunArtifactWriter.WriteRun(output, 1, second, "SECOND TRANSCRIPT", "{\"run\":2}");
+
+            Assert.Equal(2, Directory.GetFiles(output, "*.transcript.md").Length);
+            Assert.Equal(2, Directory.GetFiles(output, "*.diagnostics.json").Length);
+            Assert.Equal("FIRST TRANSCRIPT", File.ReadAllText(Path.Combine(output,
+                $"run-01-{first}.transcript.md")));
+            Assert.Equal("SECOND TRANSCRIPT", File.ReadAllText(Path.Combine(output,
+                $"run-01-{second}.transcript.md")));
+
+            Assert.Throws<IOException>(() =>
+                RunArtifactWriter.WriteRun(output, 1, first, "REPLACEMENT", "{\"run\":3}"));
+            Assert.Equal("FIRST TRANSCRIPT", File.ReadAllText(Path.Combine(output,
+                $"run-01-{first}.transcript.md")));
         }
         finally
         {
