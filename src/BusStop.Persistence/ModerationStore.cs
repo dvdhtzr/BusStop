@@ -22,6 +22,22 @@ public sealed partial class ConversationStore
             Execute("ALTER TABLE sessions ADD COLUMN moderation_policy_marker TEXT NULL;");
     }
 
+    private void EnsureShadowSamplingColumn()
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(session_moderation_policies);";
+        var found = false;
+        using (var reader = cmd.ExecuteReader())
+        {
+            while (reader.Read())
+                if (reader.GetString(1) == "shadow_sample_every")
+                    found = true;
+        }
+        if (!found)
+            Execute("ALTER TABLE session_moderation_policies " +
+                    "ADD COLUMN shadow_sample_every INTEGER NOT NULL DEFAULT 0;");
+    }
+
     private void InsertModerationPolicy(
         SqliteTransaction transaction, SessionId session, ModerationSessionPolicy policy)
     {
@@ -32,9 +48,9 @@ public sealed partial class ConversationStore
             INSERT INTO session_moderation_policies (
                 session_id, contract_version, mode, rule_version, prompt_version,
                 model_name, model_digest, temperature, think, max_moderator_calls,
-                max_revisions, stagnation_window, nudge_cooldown)
+                max_revisions, stagnation_window, nudge_cooldown, shadow_sample_every)
             VALUES (@session, @contract, @mode, @rules, @prompt, @model, @digest,
-                @temp, @think, @calls, @revisions, @window, @cooldown);
+                @temp, @think, @calls, @revisions, @window, @cooldown, @sampling);
             """;
         cmd.Parameters.AddWithValue("@session", session.ToString());
         cmd.Parameters.AddWithValue("@contract", policy.ContractVersion);
@@ -49,6 +65,7 @@ public sealed partial class ConversationStore
         cmd.Parameters.AddWithValue("@revisions", policy.MaxRevisionsPerOpportunity);
         cmd.Parameters.AddWithValue("@window", policy.StagnationWindow);
         cmd.Parameters.AddWithValue("@cooldown", policy.NudgeCooldownOpportunities);
+        cmd.Parameters.AddWithValue("@sampling", policy.ShadowSampleEvery);
         cmd.ExecuteNonQuery();
     }
 
@@ -72,7 +89,7 @@ public sealed partial class ConversationStore
         cmd.CommandText = """
             SELECT contract_version, mode, rule_version, prompt_version, model_name,
                    model_digest, temperature, think, max_moderator_calls, max_revisions,
-                   stagnation_window, nudge_cooldown
+                   stagnation_window, nudge_cooldown, shadow_sample_every
             FROM session_moderation_policies WHERE session_id = @session;
             """;
         cmd.Parameters.AddWithValue("@session", session.ToString());
@@ -95,7 +112,7 @@ public sealed partial class ConversationStore
             reader.IsDBNull(6) ? null : reader.GetDouble(6),
             thinkValue is null ? null : thinkValue == 1,
             reader.GetInt32(8), reader.GetInt32(9),
-            reader.GetInt32(10), reader.GetInt32(11));
+            reader.GetInt32(10), reader.GetInt32(11), reader.GetInt32(12));
         policy.Validate();
         if (!string.Equals(marker as string, policy.ContractVersion, StringComparison.Ordinal))
             throw new InvalidOperationException("Moderation marker and policy disagree.");
@@ -113,8 +130,12 @@ public sealed partial class ConversationStore
         var policy = GetModerationPolicy(session);
         if (policy.Mode == ModerationOperatingMode.Disabled)
             throw new InvalidOperationException("Moderator inference is disabled.");
-        if (GetSession(session)?.Status != SessionStatus.Active)
-            throw new InvalidOperationException("Moderator inference requires an active session.");
+        // Shadow may finish draining AFTER the authoritative host has ended.
+        // It cannot affect ended sessions, and it still spends its pinned budget.
+        var sessionStatus = GetSession(session)?.Status;
+        if (sessionStatus != SessionStatus.Active &&
+            !(policy.Mode == ModerationOperatingMode.Shadow && sessionStatus == SessionStatus.Ended))
+            throw new InvalidOperationException("Moderator inference requires an active session or shadow drain.");
         if (opportunity is { } opp && !GetRecordedOpportunities(session).Any(o => o.Id == opp))
             throw new InvalidOperationException("Moderator inference references an unknown speaking opportunity.");
 

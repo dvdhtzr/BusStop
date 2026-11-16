@@ -1,9 +1,11 @@
 ﻿using System.Text;
+using System.Text.Json;
 using BusStop.Console;
 using BusStop.Coordinator;
 using BusStop.Domain;
 using BusStop.Engine;
 using BusStop.Memory;
+using BusStop.Moderation;
 using BusStop.Models;
 using BusStop.Persistence;
 using BusStop.Sources;
@@ -24,6 +26,156 @@ string? Arg(string name)
 {
     var i = Array.IndexOf(argv, name);
     return i >= 0 && i + 1 < argv.Length ? argv[i + 1] : null;
+}
+
+// M1b is a separate, synthetic evaluation process. It deliberately cannot
+// start a participant session, read the private FAA audit, or write to SQLite.
+if (argv.Contains("--m1b-challenge-check") || argv.Contains("--m1b-challenge-run"))
+{
+    var check = argv.Contains("--m1b-challenge-check");
+    var run = argv.Contains("--m1b-challenge-run");
+    var approved = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "--m1b-challenge-check", "--m1b-challenge-run",
+        "--challenge-corpus", "--challenge-limit", "--challenge-budget",
+        "--moderator-model", "--ollama-url", "--moderator-timeout", "--out"
+    };
+    if (check == run || argv.Where(x => x.StartsWith("--", StringComparison.Ordinal))
+        .Any(x => !approved.Contains(x)))
+    {
+        System.Console.Error.WriteLine(
+            "M1b lab cannot be combined with conversation, session, or enforcement flags.");
+        return 2;
+    }
+
+    try
+    {
+        var corpusPath = Arg("--challenge-corpus") ??
+            Path.Combine("docs", "moderator", "corpus", "m1b-challenges-v1.json");
+        var corpusText = File.ReadAllText(corpusPath);
+        var corpus = M1bChallengeLab.Load(corpusText);
+
+        if (check)
+        {
+            System.Console.WriteLine("VALID: " + corpus.Version + " with " +
+                corpus.Cases.Length + " synthetic cases.");
+            System.Console.WriteLine("Labels: " + corpus.LabelStatus);
+            foreach (var group in corpus.Cases.GroupBy(x => x.Expected))
+                System.Console.WriteLine("  " + group.Key + ": " + group.Count());
+            System.Console.WriteLine(
+                "Validation only: no Ollama, participant session, or database.");
+            return 0;
+        }
+
+        static int Bounded(string? value, int defaultValue, int maximum,
+            string name)
+        {
+            if (value is null) return defaultValue;
+            if (!int.TryParse(value, out var count) ||
+                count < 1 || count > maximum)
+                throw new ArgumentException(name + " must be 1.." + maximum);
+            return count;
+        }
+
+        var limit = Bounded(Arg("--challenge-limit"), 36, 36, "--challenge-limit");
+        var budget = Bounded(Arg("--challenge-budget"), 72, 72, "--challenge-budget");
+        var timeout = Bounded(Arg("--moderator-timeout"), 180, 3600, "--moderator-timeout");
+        var outPath = Arg("--out");
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new ArgumentException(
+                "--out is required; use a PRIVATE folder outside the repository.");
+        var outputDir = Path.GetFullPath(outPath);
+        var repoRoot = Path.GetFullPath(Directory.GetCurrentDirectory());
+        if (outputDir.Equals(repoRoot, StringComparison.OrdinalIgnoreCase) ||
+            outputDir.StartsWith(repoRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException(
+                "M1b private results must be stored OUTSIDE the repository.");
+
+        var endpoint = Arg("--ollama-url") is { } address
+            ? new Uri(address) : null;
+        if (!OllamaAdapter.IsAvailable(endpoint))
+        {
+            System.Console.Error.WriteLine("Local Ollama is unreachable.");
+            return 2;
+        }
+        var model = Arg("--moderator-model") ?? "qwen3.5:9b";
+        using var moderator = new OllamaAdapter(
+            model, endpoint, temperature: 0.1,
+            timeout: TimeSpan.FromSeconds(timeout), think: false);
+        if (moderator.ModelDigest == "unknown")
+            throw new InvalidOperationException(
+                "Moderator model digest unavailable; refusing unpinned evaluation.");
+
+        System.Console.WriteLine("M1b synthetic lab: " + limit + " cases, at most " +
+            budget + " moderator calls. Model " + moderator.ModelName);
+        var result = M1bChallengeLab.Run(
+            corpus, corpusText, moderator, maxCases: limit, modelBudget: budget);
+
+        Directory.CreateDirectory(outputDir);
+        var reportPath = Path.Combine(outputDir, "m1b-challenges-" +
+            DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" +
+            Guid.NewGuid().ToString("N")[..8] + ".json");
+        using (var stream = new FileStream(
+            reportPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            JsonSerializer.Serialize(stream, result,
+                new JsonSerializerOptions { WriteIndented = true });
+
+        var s = result.Summary;
+        System.Console.WriteLine("Valid model reviews: " + s.ValidModelResponses +
+            "; invalid: " + s.InvalidModelResponses +
+            "; transport failures: " + s.TransportFailures);
+        System.Console.WriteLine("True positives: " + s.TruePositive +
+            "; false positives: " + s.FalsePositive +
+            "; false negatives: " + s.FalseNegative +
+            "; true negatives: " + s.TrueNegative +
+            "; unscorable: " + s.Unscorable);
+        System.Console.WriteLine("Abstentions: " + s.Abstentions +
+            "; incoherent verdicts: " + s.InconsistentJudgments);
+        System.Console.WriteLine("Deterministic exact copies: " +
+            s.DeterministicCases + "; Ollama calls: " + s.ModelCalls);
+        System.Console.WriteLine("Private case-by-case report: " + reportPath);
+        System.Console.WriteLine(
+            "Provisional labels only. No enforcement or automatic promotion.");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+        InvalidDataException or JsonException or ArgumentException or
+        InvalidOperationException)
+    {
+        System.Console.Error.WriteLine("M1b evaluation failed: " + ex.Message);
+        return 2;
+    }
+}
+
+// Read-only evaluation of the private, historical FAA shadow audit.
+if (argv.Contains("--evaluate-shadow-audit"))
+{
+    var auditPath = Arg("--evaluate-shadow-audit");
+    if (string.IsNullOrWhiteSpace(auditPath) ||
+        argv.Any(x => x is "--model" or "--discuss-document" or "--inspect-document" or
+            "--shadow-moderator" or "--runs" or "--continuing"))
+    {
+        System.Console.Error.WriteLine(
+            "Usage: --evaluate-shadow-audit <private shadow.json> [--corpus <labels.json>]");
+        return 2;
+    }
+    var labelsPath = Arg("--corpus") ??
+        Path.Combine("docs", "moderator", "corpus", "faa-shadow-v1.labels.json");
+    try
+    {
+        var metrics = ShadowCorpusEvaluator.Evaluate(
+            File.ReadAllText(auditPath), File.ReadAllText(labelsPath));
+        System.Console.WriteLine(JsonSerializer.Serialize(metrics,
+            new JsonSerializerOptions { WriteIndented = true }));
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+        JsonException or InvalidDataException or ArgumentException)
+    {
+        System.Console.Error.WriteLine($"Corpus evaluation failed: {ex.Message}");
+        return 2;
+    }
 }
 
 // Inspection proves local evidence capture without sending document text to Ollama
@@ -65,6 +217,33 @@ var continuing = argv.Contains("--continuing");
 var freshBridge = argv.Contains("--fresh-bridge");
 var c2Attribution = argv.Contains("--c2-attribution");
 var discussDocument = argv.Contains("--discuss-document");
+var shadowMode = argv.Contains("--shadow-moderator");
+
+int PositiveOption(string name, int fallback, int maximum)
+{
+    var raw = Arg(name);
+    if (raw is null) return fallback;
+    if (!int.TryParse(raw, out var parsed) || parsed is < 1 || parsed > maximum)
+        throw new ArgumentException($"{name} must be an integer from 1 to {maximum}.");
+    return parsed;
+}
+
+var maxOpportunities = PositiveOption("--max-opportunities", 18, 1000);
+var maxModelCalls = PositiveOption("--max-model-calls", 36, 2000);
+var endAfterPasses = PositiveOption("--end-after-passes", 2, 100);
+var moderatorBudget = PositiveOption("--moderator-budget", 24, 1000);
+var moderatorSampleEvery = PositiveOption("--moderator-sample-every", 3, 1000);
+var moderatorTimeout = PositiveOption("--moderator-timeout", 180, 3600);
+
+if (!shadowMode && argv.Any(arg => arg.StartsWith("--moderator-", StringComparison.Ordinal)) ||
+    shadowMode && modelKind != "ollama")
+{
+    System.Console.Error.WriteLine(
+        "Shadow moderation requires --model ollama --shadow-moderator. " +
+        "Do not supply moderator options without --shadow-moderator.");
+    return 2;
+}
+
 var contextVersion = discussDocument
     ? EvidenceBriefingBuilder.ContextVersion
     : Laboratory.GetContextVersion(c2Attribution);
@@ -148,10 +327,10 @@ switch (modelKind)
 
 var engineOptions = modelKind == "ollama"
     ? new EngineOptions(
-        MaxOpportunities: 18,
-        MaxModelCalls: 36,
+        MaxOpportunities: maxOpportunities,
+        MaxModelCalls: maxModelCalls,
         MaxAttemptsPerOpportunity: 2,
-        Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: 2))
+        Coordinator: new CoordinatorOptions(EndAfterConsecutivePasses: endAfterPasses))
     : new EngineOptions();
 
 var runConfig = new RunConfig(
@@ -165,6 +344,36 @@ var runConfig = new RunConfig(
 Action<string>? trace = modelKind == "ollama"
     ? line => System.Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}")
     : null;
+
+OllamaAdapter? moderatorAdapter = null;
+ModerationSessionPolicy moderatorPolicy = ModerationSessionPolicy.Disabled;
+if (shadowMode)
+{
+    var moderatorModelName = Arg("--moderator-model") ?? Arg("--ollama-model") ?? "qwen3.5:9b";
+    var endpoint = Arg("--ollama-url") is { } moderatorUrl ? new Uri(moderatorUrl) : null;
+    moderatorAdapter = new OllamaAdapter(
+        moderatorModelName, endpoint, temperature: 0.1,
+        timeout: TimeSpan.FromSeconds(moderatorTimeout), think: false);
+    moderatorPolicy = new ModerationSessionPolicy(
+        ModerationSessionPolicy.CurrentContractVersion,
+        ModerationOperatingMode.Shadow, ShadowModerationWorker.CurrentRuleVersion,
+        ShadowModerationWorker.CurrentPromptVersion, moderatorAdapter.ModelName, moderatorAdapter.ModelDigest,
+        0.1, false, moderatorBudget, 0, 0, 0, moderatorSampleEvery);
+    moderatorPolicy.Validate();
+    if (moderatorAdapter.ModelDigest == "unknown")
+    {
+        System.Console.Error.WriteLine(
+            $"Moderator model '{moderatorModelName}' was not found with a digest in Ollama. " +
+            "Check 'ollama list' before pinning a shadow session.");
+        moderatorAdapter.Dispose();
+        ollamaAdapter?.Dispose();
+        return 2;
+    }
+    System.Console.WriteLine(
+        $"[Moderator] SHADOW ONLY: {moderatorAdapter.ModelName}, " +
+        $"budget {moderatorBudget} calls/session, periodic sample every " +
+        $"{moderatorSampleEvery} committed utterances.");
+}
 
 using var store = ConversationStore.OpenFile(dbPath);
 store.InitializeSchema();
@@ -194,13 +403,74 @@ foreach (var (mode, label, briefing) in plan)
     if (plan.Length > 1) System.Console.WriteLine($"\n==== {label} ====");
 
     var client = makeClient();
-    var session = Laboratory.Seed(store, mode, modelConfigVersion, briefing, contextVersion);
+    var session = Laboratory.Seed(
+        store, mode, modelConfigVersion, briefing, contextVersion, moderatorPolicy);
     if (documentSnapshot is not null)
         store.PinSessionEvidence(session, documentSnapshot.SnapshotId, documentPassages!);
-    var result = new ConversationEngine(
-        store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
-        Laboratory.Cast, briefing, engineOptions, trace: trace,
-        recollections: mode == SessionMode.Continuing ? recollectionService : null).Run();
+    ShadowModerationWorker? shadowWorker = null;
+    if (moderatorAdapter is not null)
+    {
+        shadowWorker = new ShadowModerationWorker(
+            dbPath, session, moderatorPolicy, moderatorAdapter,
+            Laboratory.Cast, briefing,
+            store.GetSessionEvidence(session)?.ExposedPassageIds,
+            sampleEvery: moderatorSampleEvery,
+            queueCapacity: 8,
+            log: line => System.Console.WriteLine(
+                $"[{DateTime.Now:HH:mm:ss}] {line}"));
+    }
+
+    RunResult result;
+    try
+    {
+        result = new ConversationEngine(
+            store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
+            Laboratory.Cast, briefing, engineOptions, trace: trace,
+            recollections: mode == SessionMode.Continuing ? recollectionService : null,
+            shadowSink: shadowWorker).Run();
+    }
+    finally
+    {
+        // Wait only AFTER authoritative conversation processing stops.
+        // Never wait for a shadow review between two participant turns.
+        shadowWorker?.DrainAsync().GetAwaiter().GetResult();
+    }
+
+    if (shadowWorker is not null)
+    {
+        var reviews = store.GetShadowReviews(session);
+        var shadowReportPath = Path.Combine(outDir, $"shadow-{session}.json");
+        File.WriteAllText(shadowReportPath, JsonSerializer.Serialize(new
+        {
+            session = session.ToString(),
+            mode = "Shadow",
+            moderatorPolicy,
+            summary = new
+            {
+                selected = shadowWorker.Selected,
+                notSelected = shadowWorker.NotSelected,
+                dropped = shadowWorker.Dropped,
+                audited = shadowWorker.Written,
+                workerErrors = shadowWorker.Errors,
+                deterministicExactCopies = reviews.Count(r =>
+                    r.RequestId is null &&
+                    r.Judgment?.Finding?.Kind == ModerationIssueKind.ExactDuplicate),
+                modelValidReviews = reviews.Count(r =>
+                    r.Attempts is { Count: > 0 } &&
+                    r.Status == ShadowReviewStatus.Reviewed),
+                modelInvalidReviews = reviews.Count(r =>
+                    r.Attempts is { Count: > 0 } &&
+                    r.Status == ShadowReviewStatus.InvalidResponse),
+                chargedModeratorAttempts = store.GetModeratorReservations(session).Count
+            },
+            reviews,
+            reservations = store.GetModeratorReservations(session)
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        System.Console.WriteLine(
+            $"[Moderator] Shadow complete: {shadowWorker.Written} audits, " +
+            $"{shadowWorker.NotSelected} not selected, {shadowWorker.Dropped} dropped, " +
+            $"{shadowWorker.Errors} errors. Private audit: {shadowReportPath}");
+    }
 
     var transcript = TranscriptRenderer.RenderTranscript(store, session, Laboratory.Cast);
     var diagnostics = TranscriptRenderer.RenderDiagnostics(store, session, result, client.ModelName, client.ModelDigest, runConfig);
@@ -223,6 +493,7 @@ foreach (var (mode, label, briefing) in plan)
     runSections.AppendLine();
 }
 
+moderatorAdapter?.Dispose();
 ollamaAdapter?.Dispose();
 
 // Single run: keep transcript.md / diagnostics.json for the usual single-run flow.

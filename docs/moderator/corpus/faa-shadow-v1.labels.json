@@ -1,0 +1,173 @@
+{
+  "corpusVersion": "faa-shadow-v1",
+  "status": "provisional-assistant-labels-awaiting-owner-review",
+  "sourceSession": "32da92b9-bf9c-4216-8789-962ea6075fe9",
+  "provenance": "Private FAA shadow review; no raw content uploaded to public repository.",
+  "labels": [
+    {
+      "ordinal": 1,
+      "candidateTextSha256": "4c08908bfde7d68055b60af215ac150df33c9ab17db8689cdb6198f91f4451e0",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 2,
+      "candidateTextSha256": "215790037f1084c37de2dc3b9d0b2d4e5b97641503ea4967c08c36a7588ea036",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 3,
+      "candidateTextSha256": "80ab7e59829de4d26acc3e592b3a8826a15c53efdc94a9e75cf06eb5e2646780",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 4,
+      "candidateTextSha256": "3cc7743745058ec5ad4cd3383b41782fb09a305257e7a2192561acb612e722d0",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 5,
+      "candidateTextSha256": "2bba53947593d2f80058b7004da7087912e04ad7287302d156095eab72c3531f",
+      "expected": "NeedsHumanReview"
+    },
+    {
+      "ordinal": 6,
+      "candidateTextSha256": "e5a2b222d1b9b3bec7d4f761bc38a91d7bb18884323dc11d46b7f94f69ec67fa",
+      "expected": "NeedsHumanReview"
+    },
+    {
+      "ordinal": 7,
+      "candidateTextSha256": "d17fbf14fe27b0266047e3151df9bc456a4ead67b8c8aeedcb38b85aee8efe41",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 8,
+      "candidateTextSha256": "40c9363482c3e00d3e30d2f45d483ab367f9053502d1434c622fd1e15c93d8ad",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 9,
+      "candidateTextSha256": "44d830808c17ce789fe10ce8eebe94927e3281c519b834cfda1477a6f34c1f0b",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 10,
+      "candidateTextSha256": "72922f0e00267439a242c42c4315da9173e15287c3242d02c177a90b07f94c6e",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 11,
+      "candidateTextSha256": "80ab7e59829de4d26acc3e592b3a8826a15c53efdc94a9e75cf06eb5e2646780",
+      "expected": "ExactCopyOther"
+    },
+    {
+      "ordinal": 12,
+      "candidateTextSha256": "cd3db6c14c199faeb8a671352dfde80cf2772ea98e4eb6b6ef5d4dd463b9e2ac",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 13,
+      "candidateTextSha256": "708fb4baf078e05b9681278eda2bdfe8ec99479c4cd7f2a24bb6c27b9e8831b9",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 14,
+      "candidateTextSha256": "fe8b5a304b7db87999f11f7acce946b74f410bcfeaca9eda6d0fb09757f57ead",
+      "expected": "NeedsHumanReview"
+    },
+    {
+      "ordinal": 15,
+      "candidateTextSha256": "1b8ff1d46e91a920dd7538f5351f97255043a3683d46fe859907f3245fcd3537",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 16,
+      "candidateTextSha256": "9e20c03354d1f3bbee763ea93c9fa11bf70146779634e63fcda2dc8b7a16b2e3",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 17,
+      "candidateTextSha256": "4c5f5be9692feb6c2f46337cc7b977a734630eb024b6e9f09b0d0f4a8b656d77",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 18,
+      "candidateTextSha256": "995939e796cf58721d9f55ae7c25f6bad7a557e404151a313534c27125733ee8",
+      "expected": "NeedsHumanReview"
+    },
+    {
+      "ordinal": 19,
+      "candidateTextSha256": "64b46f79f34b3cb517f437c33effaa20ac58ce34910ded6870e46e3777cd3ced",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 20,
+      "candidateTextSha256": "39134f01d236f57c7e950ffccde9e9789c6c48741ce595880a854837fa5adae2",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 21,
+      "candidateTextSha256": "34a1b4adca21ad34bf1b274d3f78f5eb8cb2e5162b14a6832314939ad34b11ef",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 22,
+      "candidateTextSha256": "e716e06eb9e6ffb36a150aa02a926c08467833e137655ee0bbff753151fa551d",
+      "expected": "NeedsHumanReview"
+    },
+    {
+      "ordinal": 23,
+      "candidateTextSha256": "f6883d6a99f8f689f6131951b79e1771279fa4dd98e264ab1f2bb7e71210c682",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 24,
+      "candidateTextSha256": "d914d7606b675574cceabc376bb5f3ce010b841ca7aec09b4a5f62517cf0cd71",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 25,
+      "candidateTextSha256": "52522985746d89c46d764bc6d623de2875b1ff19c485fb8443a6362444ad16fa",
+      "expected": "NeedsHumanReview"
+    },
+    {
+      "ordinal": 26,
+      "candidateTextSha256": "635dc053f5f299179b8bfa49e735a46d640a76677b8b3e73b89471d0133339b9",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 27,
+      "candidateTextSha256": "572c6ef2babe2e46347667ae8c405869ca491cff2eefbbe7229e07d280021d3b",
+      "expected": "NeedsHumanReview"
+    },
+    {
+      "ordinal": 28,
+      "candidateTextSha256": "0ecb9ceee4752b705550819c908ee162b000d68d6821fc111fbc407c97c8f97d",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 29,
+      "candidateTextSha256": "b3510e0cd5346479b8963a5d66d09cbc3192bd972dc588079208882be84cd1ce",
+      "expected": "ExactCopySelf"
+    },
+    {
+      "ordinal": 30,
+      "candidateTextSha256": "1189b61279411932766b738260c5b4c61886b4ef450d4815a2959a23ee45d57c",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 31,
+      "candidateTextSha256": "409799bcc433085c6b4b869737788d0ffa8e49aea4e4ba79bb511f371f5d192b",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 32,
+      "candidateTextSha256": "7f2936f5ea4e4b37bc4c8f67968ca074bb67f48370d7a5d34b96eee657a3266d",
+      "expected": "Allow"
+    },
+    {
+      "ordinal": 33,
+      "candidateTextSha256": "4560ce37260f7e8bd67d2e075036f1b593043da7655a9eb03ce0dd8ea780064c",
+      "expected": "Allow"
+    }
+  ]
+}

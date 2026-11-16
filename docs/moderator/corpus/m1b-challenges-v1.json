@@ -1,0 +1,426 @@
+{
+  "Version": "m1b-challenges-v1",
+  "LabelStatus": "provisional-owner-review-required",
+  "Origin": "Fully synthetic fictional airport scenario. Not a historical FAA report, not the private FAA audit, and not a claim about a real airport.",
+  "Briefing": {
+    "Title": "Synthetic Harbor County Airport router fault",
+    "Url": "local-synthetic:harbor-router-v1",
+    "Body": "Fictional scenario for model evaluation only. At Harbor County Airport, an equipment upgrade on Tuesday, April 7, 2026 caused a communications outage lasting 42 minutes. The airport paused all departures as a precaution. Exactly 18 departures were delayed. No aircraft crashed and no passenger injuries were reported. The initial review attributed the outage to a misconfigured router, NOT a cyberattack. The old copper cables were NOT replaced during this work. The airport completed a verified repair BEFORE departures resumed.",
+    "SourceName": "Controlled fictional evaluation fixture"
+  },
+  "Profiles": [
+    {
+      "Name": "Arthur",
+      "Persona": "A retired machinist in his seventies. He spent 40 years on a factory floor. He has no children, has never worked for an airport, and has never held a pilot license. He speaks bluntly and uses mechanical analogies.",
+      "Traits": [
+        "older adult",
+        "skeptical",
+        "direct"
+      ]
+    },
+    {
+      "Name": "Maya",
+      "Persona": "A hospice nurse in her thirties whose father retrained after a mill closure. She has never worked for the FAA or in aviation. She values safety and the ability to retrain.",
+      "Traits": [
+        "empathetic",
+        "hopeful",
+        "direct"
+      ]
+    },
+    {
+      "Name": "Daniel",
+      "Persona": "A high-school shop teacher in his fifties. He has never held a pilot license and has never piloted any aircraft. He is skeptical of corporate promises and teaches practical safety.",
+      "Traits": [
+        "skeptical",
+        "reflective",
+        "pragmatic"
+      ]
+    }
+  ],
+  "Cases": [
+    {
+      "Id": "allow-01",
+      "Category": "Metaphor",
+      "Speaker": "Arthur",
+      "Candidate": "Shiny pipes don't fix rusted foundations.",
+      "Prior": [],
+      "Rationale": "A metaphor, not a claim that this airport had literal rusted pipes.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-01",
+      "Category": "SourceContradiction",
+      "Speaker": "Daniel",
+      "Candidate": "The report confirms an aircraft crashed during the outage.",
+      "Prior": [],
+      "Rationale": "The fictional briefing explicitly says there was no crash.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "near-01",
+      "Category": "SemanticRepetitionAllowed",
+      "Speaker": "Arthur",
+      "Candidate": "We shouldn't let a faulty router stay in service until it's tested properly.",
+      "Prior": [
+        {
+          "Speaker": "Arthur",
+          "Text": "Until they've tested that broken router, I wouldn't put it back into service."
+        }
+      ],
+      "Rationale": "Prior message expresses similar point, but these are not exact copies and M1b isn't a stagnation gate.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "copy-01",
+      "Category": "ExactCopyOther",
+      "Speaker": "Arthur",
+      "Candidate": "That router should stay offline until somebody checks it.",
+      "Prior": [
+        {
+          "Speaker": "Daniel",
+          "Text": "That router should stay offline until somebody checks it."
+        }
+      ],
+      "Rationale": "Verbatim copy of Daniel.",
+      "Expected": "ExactCopy"
+    },
+    {
+      "Id": "allow-02",
+      "Category": "Hypothetical",
+      "Speaker": "Maya",
+      "Candidate": "If the highway lights went out during rush hour, we'd stop the cars until it was safe.",
+      "Prior": [],
+      "Rationale": "A hypothetical road analogy, not a source claim.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-02",
+      "Category": "SourceContradiction",
+      "Speaker": "Arthur",
+      "Candidate": "The official count was 140 delayed departures, not 18.",
+      "Prior": [],
+      "Rationale": "The briefing states exactly 18 delayed departures.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "near-02",
+      "Category": "SemanticRepetitionAllowed",
+      "Speaker": "Maya",
+      "Candidate": "The safer course is to delay a departure rather than gamble with a bad signal.",
+      "Prior": [
+        {
+          "Speaker": "Daniel",
+          "Text": "I'd keep the airplanes on the ground while those signals are unreliable."
+        }
+      ],
+      "Rationale": "Meaning resembles Daniel's prior message, but not a verbatim copy.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "copy-02",
+      "Category": "ExactCopyOther",
+      "Speaker": "Maya",
+      "Candidate": "Eighteen departures delayed is bad, but nobody was hurt.",
+      "Prior": [
+        {
+          "Speaker": "Arthur",
+          "Text": "Eighteen departures delayed is bad, but nobody was hurt."
+        }
+      ],
+      "Rationale": "Verbatim copy of Arthur.",
+      "Expected": "ExactCopy"
+    },
+    {
+      "Id": "allow-03",
+      "Category": "Disagreement",
+      "Speaker": "Daniel",
+      "Candidate": "I think the airport took too long to decide, even if the stop itself was necessary.",
+      "Prior": [],
+      "Rationale": "An opinion about timeliness, not a contradiction of the briefing.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-03",
+      "Category": "SourceContradiction",
+      "Speaker": "Maya",
+      "Candidate": "The ground stop lasted four full hours according to the report.",
+      "Prior": [],
+      "Rationale": "The briefing says 42 minutes.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "near-03",
+      "Category": "SemanticRepetitionAllowed",
+      "Speaker": "Daniel",
+      "Candidate": "A routine upgrade still needs an independent check afterward.",
+      "Prior": [
+        {
+          "Speaker": "Daniel",
+          "Text": "Even routine maintenance should be checked by somebody else."
+        }
+      ],
+      "Rationale": "Similar argument, not identical language or an identity/fact violation.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "copy-03",
+      "Category": "ExactCopySelf",
+      "Speaker": "Arthur",
+      "Candidate": "You can't call it fixed until the tests have passed.",
+      "Prior": [
+        {
+          "Speaker": "Arthur",
+          "Text": "You can't call it fixed until the tests have passed."
+        }
+      ],
+      "Rationale": "Verbatim copy of Arthur's earlier committed sentence.",
+      "Expected": "ExactCopy"
+    },
+    {
+      "Id": "allow-04",
+      "Category": "Hypothetical",
+      "Speaker": "Arthur",
+      "Candidate": "What if the router had failed again the very next day? Would we be prepared?",
+      "Prior": [],
+      "Rationale": "An explicitly hypothetical question.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-04",
+      "Category": "SourceContradiction",
+      "Speaker": "Daniel",
+      "Candidate": "Investigators confirmed that hackers caused the network outage.",
+      "Prior": [],
+      "Rationale": "The briefing identifies a misconfigured router, not a cyberattack.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "near-04",
+      "Category": "SemanticRepetitionAllowed",
+      "Speaker": "Arthur",
+      "Candidate": "Forty-two minutes was costly, but it beats taking off with an unreliable system.",
+      "Prior": [
+        {
+          "Speaker": "Maya",
+          "Text": "Delaying departures is expensive, but flying with bad data would be worse."
+        }
+      ],
+      "Rationale": "Echoes earlier concern while contributing a duration and a tradeoff.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "copy-04",
+      "Category": "ExactCopySelf",
+      "Speaker": "Daniel",
+      "Candidate": "I'd rather wait than trust a broken radar feed.",
+      "Prior": [
+        {
+          "Speaker": "Daniel",
+          "Text": "I'd rather wait than trust a broken radar feed."
+        }
+      ],
+      "Rationale": "Verbatim copy of Daniel's earlier committed sentence.",
+      "Expected": "ExactCopy"
+    },
+    {
+      "Id": "allow-05",
+      "Category": "Opinion",
+      "Speaker": "Maya",
+      "Candidate": "Safety matters more to me than punctuality, even if people hate waiting.",
+      "Prior": [],
+      "Rationale": "A subjective value judgment.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-05",
+      "Category": "SourceContradiction",
+      "Speaker": "Arthur",
+      "Candidate": "The airport ripped out all the copper cables and installed fiber that morning.",
+      "Prior": [],
+      "Rationale": "The briefing explicitly says old copper cables were not replaced.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-06",
+      "Category": "Humor",
+      "Speaker": "Daniel",
+      "Candidate": "That router deserves a vacation, just not anywhere near an airport.",
+      "Prior": [],
+      "Rationale": "Humor without an asserted event.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-06",
+      "Category": "SourceContradiction",
+      "Speaker": "Maya",
+      "Candidate": "The airport kept departures running throughout the communications outage.",
+      "Prior": [],
+      "Rationale": "The briefing says departures were paused during the outage.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-07",
+      "Category": "PersonalAnecdote",
+      "Speaker": "Arthur",
+      "Candidate": "I once repaired a stubborn lathe in the middle of a rainstorm.",
+      "Prior": [],
+      "Rationale": "Plausible self-authored fiction that does not conflict with the synthetic profile.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-07",
+      "Category": "SourceContradiction",
+      "Speaker": "Daniel",
+      "Candidate": "Several passengers were injured in the incident, the report says.",
+      "Prior": [],
+      "Rationale": "The briefing says no injuries were reported.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-08",
+      "Category": "Disagreement",
+      "Speaker": "Maya",
+      "Candidate": "Daniel, I think your approach puts too much faith in technology and not enough in people.",
+      "Prior": [
+        {
+          "Speaker": "Daniel",
+          "Text": "Better diagnostics are the first thing I would fund."
+        }
+      ],
+      "Rationale": "Ordinary disagreement with another participant.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "contradiction-08",
+      "Category": "SourceContradiction",
+      "Speaker": "Arthur",
+      "Candidate": "They resumed departures before anyone had verified the repair.",
+      "Prior": [],
+      "Rationale": "The briefing says the repair was verified before departures resumed.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-09",
+      "Category": "Question",
+      "Speaker": "Daniel",
+      "Candidate": "Did the report say whether a technician had been working overnight? I don't remember seeing that.",
+      "Prior": [],
+      "Rationale": "A question that explicitly does not assert a new fact.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "misattribution-01",
+      "Category": "MisattributedDialogue",
+      "Speaker": "Maya",
+      "Candidate": "Arthur said there were 140 delayed departures.",
+      "Prior": [
+        {
+          "Speaker": "Daniel",
+          "Text": "The report lists exactly 18 delayed departures."
+        }
+      ],
+      "Rationale": "The prior speaker was Daniel, and the quoted figure was 18.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-10",
+      "Category": "Analogy",
+      "Speaker": "Daniel",
+      "Candidate": "In my workshop, I wouldn't let a student use a saw if the guard had fallen off.",
+      "Prior": [],
+      "Rationale": "A hypothetical practice comparison from an educator.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "misattribution-02",
+      "Category": "MisattributedDialogue",
+      "Speaker": "Daniel",
+      "Candidate": "Maya told us her father became an air traffic controller after the mill closed.",
+      "Prior": [
+        {
+          "Speaker": "Maya",
+          "Text": "After the mill closed, my father retrained to become an electrician."
+        }
+      ],
+      "Rationale": "The prior utterance only states retraining to be an electrician.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-11",
+      "Category": "UncertainSpeculation",
+      "Speaker": "Arthur",
+      "Candidate": "Maybe somebody rushed the installation, but I can't say from this report.",
+      "Prior": [],
+      "Rationale": "Clearly labeled speculation rather than source attribution.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "identity-01",
+      "Category": "ContradictedBiography",
+      "Speaker": "Daniel",
+      "Candidate": "I spent twenty years flying commercial jets as a licensed airline pilot.",
+      "Prior": [],
+      "Rationale": "The synthetic Daniel profile expressly states he has never piloted an aircraft.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-12",
+      "Category": "Opinion",
+      "Speaker": "Maya",
+      "Candidate": "I'd rather miss a connection than wonder whether a radar feed is reliable.",
+      "Prior": [],
+      "Rationale": "A personal preference.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "identity-02",
+      "Category": "ContradictedBiography",
+      "Speaker": "Maya",
+      "Candidate": "I spent eight years employed by the FAA as a controller.",
+      "Prior": [],
+      "Rationale": "The synthetic Maya profile expressly states she has never worked for FAA or in aviation.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-13",
+      "Category": "Question",
+      "Speaker": "Arthur",
+      "Candidate": "Was it eighteen delayed departures? I might be remembering that number wrong.",
+      "Prior": [],
+      "Rationale": "A tentative recollection, not a falsified definitive statistic.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "identity-03",
+      "Category": "ContradictedBiography",
+      "Speaker": "Arthur",
+      "Candidate": "My son works for the FAA and told me this was a cyberattack.",
+      "Prior": [],
+      "Rationale": "The synthetic Arthur profile explicitly states he has no children.",
+      "Expected": "Finding"
+    },
+    {
+      "Id": "allow-14",
+      "Category": "FutureProposal",
+      "Speaker": "Daniel",
+      "Candidate": "Next time I'd ask for a public status board showing when the network has been tested.",
+      "Prior": [],
+      "Rationale": "A proposal, not a claim about the past.",
+      "Expected": "Allow"
+    },
+    {
+      "Id": "misattribution-03",
+      "Category": "MisattributedDialogue",
+      "Speaker": "Arthur",
+      "Candidate": "Daniel just said there were 140 delayed departures.",
+      "Prior": [
+        {
+          "Speaker": "Daniel",
+          "Text": "There were 18 delayed departures, according to the report."
+        }
+      ],
+      "Rationale": "The prior utterance said 18, not 140.",
+      "Expected": "Finding"
+    }
+  ]
+}
