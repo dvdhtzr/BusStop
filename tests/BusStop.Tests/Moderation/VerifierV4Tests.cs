@@ -549,8 +549,7 @@ public sealed class VerifierV4Tests
             Reply = _ => ModelResponse.Responded("""{"claims":[]}""")
         };
         var extraction = V3ModelClaimExtractor.Extract(
-            job, u, v3Policy, selectedForModel: true,
-            extractionModel, permit);
+            job, u, v3Policy, true, extractionModel, permit);
         Assert.Equal(1, extraction.ModelAttempts);
         Assert.Equal(V3ExtractionCoverage.ModelAugmented, extraction.Coverage);
         Assert.Equal(1, db.GetV4AttemptCounts(job).UtteranceExtractionAttempts);
