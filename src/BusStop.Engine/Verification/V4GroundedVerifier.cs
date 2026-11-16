@@ -199,6 +199,7 @@ public sealed class V4GroundedVerifier
             VerificationOperationalStatus lastFailure = VerificationOperationalStatus.InvalidResponse;
             string lastDetail = "No valid independent claim judgments were returned.";
             bool processed = false;
+            bool attemptedThisBatch = false;
 
             while (charged < policy.MaxVerificationCallsPerUtterance)
             {
@@ -208,7 +209,7 @@ public sealed class V4GroundedVerifier
                 {
                     // If no attempt could be reserved at all, this is a genuine
                     // budget skip. After a failed call, preserve its failure.
-                    if (charged == 0 || !processed)
+                    if (!attemptedThisBatch)
                     {
                         lastFailure = VerificationOperationalStatus.SkippedForBudget;
                         lastDetail = "Pinned shared session or per-utterance budget exhausted.";
@@ -216,6 +217,7 @@ public sealed class V4GroundedVerifier
                     break;
                 }
 
+                attemptedThisBatch = true;
                 charged++;
                 chargedIds.Add(requestId);
                 ModelResponse? response = null;
@@ -261,6 +263,7 @@ public sealed class V4GroundedVerifier
                         {
                             var verdicts = V4JudgmentParser.Parse(
                                 response.RawJson, job, observed, batch);
+                            var validated = new List<VerificationClaimResult>();
                             for (int i = 0; i < batch.Length; i++)
                             {
                                 var output = new VerificationClaimResult(
@@ -270,8 +273,12 @@ public sealed class V4GroundedVerifier
                                 EvidenceVerificationValidator.ValidateClaimResult(
                                     output, batch[i].Packet, batch[i].Claim,
                                     job, observed, batch[i].HostScope);
-                                results.Add(batch[i].Claim.ClaimId, output);
+                                validated.Add(output);
                             }
+                            // All-or-nothing batch insertion. An invalid later
+                            // claim cannot leave a partially accepted batch.
+                            foreach (var output in validated)
+                                results.Add(output.ClaimId, output);
                             processed = true;
                             break;
                         }
