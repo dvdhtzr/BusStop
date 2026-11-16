@@ -630,6 +630,26 @@ public sealed class VerifierV4Tests
     }
 
     [Fact]
+    public void Recorded_opportunity_boundary_must_match_the_original_job()
+    {
+        var fixture = Setup();
+        using var db = fixture.Store;
+        var malformedOpportunity = new SpeakingOpportunity(
+            OpportunityId.New(), fixture.Session.Id, fixture.Speaker.Id,
+            OpportunityReason.FairOrder, 19, OpportunityStatus.Offered);
+        db.SaveOpportunity(malformedOpportunity, 0);
+        var u = db.CommitUtterance(
+            malformedOpportunity.Id, fixture.Session.Id, fixture.Speaker.Id,
+            "The report counted 12 outages.", null, null, DateTimeOffset.UtcNow);
+        var job = Job(u);
+
+        Assert.Throws<InvalidDataException>(() =>
+            db.TryReserveV4Attempt(job, Guid.NewGuid(),
+                V4AttemptPhase.ClaimVerification));
+        Assert.Empty(db.GetModeratorReservations(job.SessionId));
+    }
+
+    [Fact]
     public void Host_reconciler_rejects_missing_or_fabricated_clean_claim_results()
     {
         var fixture = Setup();
