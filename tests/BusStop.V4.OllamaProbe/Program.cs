@@ -139,6 +139,7 @@ try
     Console.WriteLine("Model: " + model.ModelName);
     Console.WriteLine("Digest: " + model.ModelDigest);
     foreach (var sample in cases)
+    {
         Console.WriteLine(sample.Name + ": " +
             "verified=" + sample.Report.Summary.VerifiedClaims +
             " contradicted=" + sample.Report.Summary.ConfirmedContradictions +
@@ -146,6 +147,21 @@ try
             " failed=" + sample.Report.Summary.FailedClaims +
             " skipped=" + sample.Report.Summary.SkippedForBudget +
             " modelAttempts=" + sample.Report.VerificationAttemptsThisRun);
+
+        // Only report host-side exception categories and response metadata,
+        // never source excerpts or raw model JSON on the console.
+        foreach (var (attempt, index) in sample.Report.AttemptDiagnostics
+                     .Select((value, index) => (value, index)))
+        {
+            if (attempt.Status != VerificationOperationalStatus.Completed)
+                Console.WriteLine(sample.Name + ": attempt " + (index + 1) +
+                    " " + attempt.Status + "; reason=" + attempt.Detail +
+                    "; doneReason=" + (attempt.DoneReason ?? "n/a") +
+                    "; chars=" + attempt.ResponseCharacterCount +
+                    "; promptTokens=" + (attempt.PromptEvalCount?.ToString() ?? "n/a") +
+                    "; generatedTokens=" + (attempt.EvalCount?.ToString() ?? "n/a"));
+        }
+    }
 
     Console.WriteLine("Private owner-review audit written: " + audit);
 
