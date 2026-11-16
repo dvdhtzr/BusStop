@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -164,6 +165,7 @@ public sealed class V4GroundedVerifier
 
         int charged = 0;
         var chargedIds = new List<Guid>();
+        var diagnostics = new List<V4AttemptDiagnostic>();
 
         while (pending.Count > 0)
         {
@@ -233,7 +235,7 @@ public sealed class V4GroundedVerifier
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     lastFailure = VerificationOperationalStatus.TransportFailure;
-                    lastDetail = "Verifier model invocation failed or was interrupted.";
+                    lastDetail = "Model invocation exception: " + ex.GetType().Name + ".";
                 }
                 finally
                 {
@@ -251,7 +253,7 @@ public sealed class V4GroundedVerifier
                     if (response?.Transport != ModelTransport.Responded)
                     {
                         lastFailure = VerificationOperationalStatus.TransportFailure;
-                        lastDetail = "Verifier model returned a non-success transport status.";
+                        lastDetail = "Model transport status: " + (response?.Transport.ToString() ?? "null response") + ".";
                     }
                     else if (string.Equals(response.Generation?.DoneReason,
                                  "length", StringComparison.OrdinalIgnoreCase))
@@ -282,6 +284,8 @@ public sealed class V4GroundedVerifier
                             foreach (var output in validated)
                                 results.Add(output.ClaimId, output);
                             processed = true;
+                            RecordAttempt(requestId, VerificationOperationalStatus.Completed,
+                                "Host accepted all claims in this batch.", response);
                             break;
                         }
                         catch (Exception ex) when (ex is JsonException or
@@ -289,10 +293,13 @@ public sealed class V4GroundedVerifier
                             FormatException or ArgumentException or OverflowException)
                         {
                             lastFailure = VerificationOperationalStatus.InvalidResponse;
-                            lastDetail = "Malformed, unverifiable or unauthorized claim judgments.";
+                            lastDetail = ShortDiagnostic("V4 rejected the model result: " +
+                                ex.GetType().Name + ": " + ex.Message);
                         }
                     }
                 }
+
+                RecordAttempt(requestId, lastFailure, lastDetail, response);
 
                 // Retry only within the SAME two-call verification budget.
                 // The next loop reserves a NEW unique charged request ID.
@@ -307,9 +314,13 @@ public sealed class V4GroundedVerifier
         }
 
         var all = extraction.Claims.Select(c => results[c.ClaimId]).ToArray();
-        return V4HostReconciler.Reconcile(
+        var reviewed = V4HostReconciler.Reconcile(
             job, extraction, assembly, all, charged,
             Array.AsReadOnly(chargedIds.ToArray()));
+        return reviewed with
+        {
+            AttemptDiagnostics = Array.AsReadOnly(diagnostics.ToArray())
+        };
 
         void UnresolveRemaining(VerificationOperationalStatus status, string detail)
         {
@@ -317,6 +328,26 @@ public sealed class V4GroundedVerifier
                 results.Add(item.Claim.ClaimId, Unresolved(item.Claim, status, detail));
             pending.Clear();
         }
+
+        void RecordAttempt(Guid id, VerificationOperationalStatus status,
+            string detail, ModelResponse? response)
+        {
+            var raw = response?.RawJson;
+            diagnostics.Add(new V4AttemptDiagnostic(
+                id, status, ShortDiagnostic(detail),
+                response?.Generation?.DoneReason,
+                response?.Generation?.PromptEvalCount,
+                response?.Generation?.EvalCount,
+                raw?.Length ?? 0,
+                raw is null ? null : Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant()));
+        }
+    }
+
+    private static string ShortDiagnostic(string text)
+    {
+        var singleLine = text.Replace('\r', ' ').Replace('\n', ' ');
+        return singleLine.Length <= 480 ? singleLine : singleLine[..480];
     }
 
     private static ClaimCategory EffectiveCategory(ClaimCandidate claim)
