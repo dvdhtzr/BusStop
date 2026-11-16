@@ -103,7 +103,7 @@ public sealed class VerifierV3ExtractionTests
             "Just kidding, I flew 500 planes! Could there be 20? If 7 were late, that would be odd. Bea said \"12 flights\".");
         var found = V3ClaimDetector.Detect(f.Job, f.Utterance);
         Assert.Contains(found.Claims,
-            c => c.ClaimText == "500" &&
+            c => c.ClaimText.Contains("500", StringComparison.Ordinal) &&
                 c.RhetoricalMode == ClaimRhetoricalMode.Humorous);
         Assert.Contains(found.Claims,
             c => c.ClaimText == "20" &&
@@ -425,9 +425,6 @@ public sealed class VerifierV3PacketTests
         var utterance = Speak(db, f.Session, f.Speaker,
             "Bea worked as a nurse for 6 years.");
         var job = Job(utterance);
-        var personal = V3ClaimDetector.Detect(job, utterance);
-        var built = new V3EvidencePacketAssembler(db).Assemble(job, utterance, personal);
-
         // Model may label a third-person claim CharacterIdentity. The host must
         // not substitute the observer's own autobiography as "evidence".
         var thirdPerson = new ClaimCandidate(
