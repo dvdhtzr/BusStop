@@ -59,6 +59,20 @@ dotnet run --project .\tests\BusStop.V4.OllamaProbe\BusStop.V4.OllamaProbe.cspro
 
 Use an installed local Ollama model tag, and **keep `data/v4-private-ollama-audit.json` private**. The probe does not claim a semantic result is correct just because the JSON is valid; inspect claim-level outcomes and citations. A technical RED is a V4 blocker, not a reason to relax host authority or rewrite an M1b corpus label. The model digest is recorded to make repeat acceptance comparable. You may share a redacted result summary instead of uploading source texts.
 
+## Gate-2 first-run diagnostic addendum (2026-11-16)
+
+Owner's local Windows build, model-free regressions, and standalone probe build all passed, but the first pinned `qwen3.5:9b` run was **V4 OLLAMA TECHNICAL RED**:
+
+- `source-fact`: 0 verified, 1 failed, 2 charged verification attempts.
+- `unanchored-autobiography`: 1 insufficient, no model call.
+- `dialogue-attribution`: 1 contradiction and 1 insufficient, 1 model call.
+
+The original V4 failure detail was too generic to identify whether the model produced malformed JSON, wrong claim/packet identity, invented citations, a failed transport, or an overlong response. That is an **observability deficiency**, not evidence that the strict host validation should be weakened.
+
+The subsequent *diagnostic-only* PR update adds bounded, private `V4AttemptDiagnostic` records per charged model attempt: request ID, operational status, host-side rejection reason, Ollama done reason and token counts where available, output character count, and SHA-256 **but never raw model text**. The probe prints failure category/reason locally; the private audit keeps this metadata in `Report.AttemptDiagnostics`. Added tests cover malformed JSON, forbidden citations, and transport failures.
+
+**Re-run both gates from the updated PR head.** If Gate 2 is still RED, capture the printed `source-fact: attempt ... reason=...` lines. Do **not** change the verifier's outcomes, evidence scope, retry ceiling, or charge accounting merely to force GREEN. Resolve the identified root cause in a separately reviewable update, then re-run. Owner semantic review remains required even after technical GREEN.
+
 ## Merge gate
 
 **No merge, no V5 implementation and no claims of local/Ollama GREEN by the GitHub authoring environment.** Require owner-reported model-free GREEN plus isolated Ollama acceptance evidence, review any failures, then explicit PR merge authorization. If Ollama semantic performance is unsatisfactory, V4 stays isolated and reports the deficiency rather than granting enforcement.
