@@ -215,7 +215,7 @@ internal static class Schema
             history_key         TEXT NOT NULL,
             statement           TEXT NOT NULL,
             source_session_id   TEXT NOT NULL REFERENCES sessions(id),
-            source_utterance_id TEXT NOT NULL UNIQUE REFERENCES utterances(id),
+            source_utterance_id TEXT NOT NULL REFERENCES utterances(id),
             source_sequence     INTEGER NOT NULL,
             event_kind          TEXT NOT NULL
                 CHECK (event_kind IN ('Provisional', 'ReviewedSelfReaffirmation', 'ReviewedSelfCorrection')),
