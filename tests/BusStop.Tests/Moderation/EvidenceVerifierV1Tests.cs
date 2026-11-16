@@ -296,6 +296,70 @@ public sealed class EvidenceVerifierV1Tests
     }
 
     [Fact]
+    public void Distinct_overlapping_claims_are_allowed_but_duplicate_ids_or_indices_are_not()
+    {
+        var f = Fixture();
+        var start = f.Utterance.Text.IndexOf("outages", StringComparison.Ordinal);
+        var overlapping = f.Claim with
+        {
+            ClaimId = Guid.NewGuid(),
+            Index = 1,
+            Start = start,
+            Length = "outages".Length,
+            ClaimText = "outages"
+        };
+        EvidenceVerificationValidator.ValidateClaims(
+            new[] { f.Claim, overlapping }, f.Job, f.Utterance);
+        Assert.Throws<InvalidDataException>(() =>
+            EvidenceVerificationValidator.ValidateClaims(
+                new[] { f.Claim, overlapping with { Index = 0 } },
+                f.Job, f.Utterance));
+        Assert.Throws<InvalidDataException>(() =>
+            EvidenceVerificationValidator.ValidateClaims(
+                new[] { f.Claim, overlapping with { ClaimId = f.Claim.ClaimId } },
+                f.Job, f.Utterance));
+    }
+
+    [Fact]
+    public void Conflicting_evidence_requires_distinct_opposing_and_supporting_references()
+    {
+        var f = Fixture();
+        var other = f.Item with
+        {
+            ReferenceId = "briefing:second-exposed-report",
+            SourceId = "second-report",
+            SourceSha256 = Hash("12 outages were recorded."),
+            Excerpt = "12 outages were recorded."
+        };
+        var scope = f.Scope with
+        {
+            AuthorizedItems = new Dictionary<string, EvidenceItem>(StringComparer.Ordinal)
+            {
+                [f.Item.ReferenceId] = f.Item,
+                [other.ReferenceId] = other
+            }
+        };
+        var packet = EvidencePacketFactory.Freeze(
+            Guid.NewGuid(), f.Packet.Content with { Items = new[] { f.Item, other } });
+        var conflicting = new ClaimJudgment(
+            f.Claim.ClaimId, packet.PacketId, packet.Sha256,
+            ClaimVerificationOutcome.ConflictingEvidence,
+            new[] { other.ReferenceId }, new[] { f.Item.ReferenceId },
+            f.Claim.ClaimText, "The two in-scope reports disagree on the count.");
+        EvidenceVerificationValidator.ValidateJudgment(
+            conflicting, packet, f.Claim, f.Job, f.Utterance, scope);
+
+        Assert.Throws<InvalidDataException>(() =>
+            EvidenceVerificationValidator.ValidateJudgment(
+                conflicting with { SupportingReferences = Array.Empty<string>() },
+                packet, f.Claim, f.Job, f.Utterance, scope));
+        Assert.Throws<InvalidDataException>(() =>
+            EvidenceVerificationValidator.ValidateJudgment(
+                conflicting with { SupportingReferences = new[] { f.Item.ReferenceId } },
+                packet, f.Claim, f.Job, f.Utterance, scope));
+    }
+
+    [Fact]
     public void Partial_scope_cannot_be_disguised_as_complete_scope()
     {
         var f = Fixture();
