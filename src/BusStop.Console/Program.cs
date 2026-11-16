@@ -236,8 +236,8 @@ if (shadowMode)
         timeout: TimeSpan.FromSeconds(moderatorTimeout), think: false);
     moderatorPolicy = new ModerationSessionPolicy(
         ModerationSessionPolicy.CurrentContractVersion,
-        ModerationOperatingMode.Shadow, "shadow-rules-v1",
-        "shadow-m1-prompt-v1", moderatorAdapter.ModelName, moderatorAdapter.ModelDigest,
+        ModerationOperatingMode.Shadow, ShadowModerationWorker.CurrentRuleVersion,
+        ShadowModerationWorker.CurrentPromptVersion, moderatorAdapter.ModelName, moderatorAdapter.ModelDigest,
         0.1, false, moderatorBudget, 0, 0, 0, moderatorSampleEvery);
     moderatorPolicy.Validate();
     if (moderatorAdapter.ModelDigest == "unknown")

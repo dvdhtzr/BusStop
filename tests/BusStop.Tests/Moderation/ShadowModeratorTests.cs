@@ -108,8 +108,8 @@ public sealed class ShadowModeratorTests : IDisposable
         ModerationSessionPolicy.Disabled with
         {
             Mode = ModerationOperatingMode.Shadow,
-            RuleVersion = "shadow-rules-v1",
-            PromptVersion = "shadow-m1-prompt-v1",
+            RuleVersion = ShadowModerationWorker.CurrentRuleVersion,
+            PromptVersion = ShadowModerationWorker.CurrentPromptVersion,
             ModelName = "local-moderator",
             ModelDigest = "local-digest",
             Temperature = 0.1,

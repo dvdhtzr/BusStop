@@ -14,6 +14,9 @@ namespace BusStop.Engine;
 /// </summary>
 public sealed class ShadowModerationWorker : IShadowModerationSink
 {
+    public const string CurrentRuleVersion = "shadow-rules-m1a-v2";
+    public const string CurrentPromptVersion = "shadow-prompt-m1a-v2";
+
     private sealed record Item(ShadowObservation Observation, string Trigger);
 
     private readonly Channel<Item> _queue;
@@ -41,6 +44,12 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
     {
         if (policy.Mode != ModerationOperatingMode.Shadow)
             throw new InvalidOperationException("Shadow worker requires a shadow policy.");
+        // A pre-M1a policy cannot silently use different prompts, schema or
+        // generation limits after upgrade. New runs must pin this version.
+        if (policy.RuleVersion != CurrentRuleVersion ||
+            policy.PromptVersion != CurrentPromptVersion)
+            throw new InvalidOperationException(
+                "Shadow policy versions do not match this worker; resume refused.");
         if (policy.ShadowSampleEvery != sampleEvery)
             throw new InvalidOperationException("Shadow sampling must match pinned session policy.");
         if (sampleEvery is < 1 or > 1000 || queueCapacity is < 1 or > 64)
