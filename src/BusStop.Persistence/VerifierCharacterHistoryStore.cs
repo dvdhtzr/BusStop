@@ -249,12 +249,32 @@ public sealed partial class ConversationStore
         {
             var previous = ReadVerifierHistoryEvent(proposed.PreviousEventId!.Value, tx)
                 ?? throw new InvalidDataException("Unknown history predecessor.");
-            var earlier = GetCommittedUtterances(previous.SourceSession)
-                .Single(x => x.Id == previous.SourceUtterance);
+            // Read the predecessor's committed time IN THIS TRANSACTION.
+            // Do not call non-transactional GetCommittedUtterances while a
+            // Microsoft.Data.Sqlite local transaction is active.
+            using var earlierCommand = _connection.CreateCommand();
+            earlierCommand.Transaction = tx;
+            earlierCommand.CommandText = """
+                SELECT committed_at FROM utterances
+                WHERE id = @utterance AND session_id = @session
+                  AND speaker = @subject AND sequence = @sequence;
+                """;
+            earlierCommand.Parameters.AddWithValue("@utterance",
+                previous.SourceUtterance.ToString());
+            earlierCommand.Parameters.AddWithValue("@session",
+                previous.SourceSession.ToString());
+            earlierCommand.Parameters.AddWithValue("@subject",
+                previous.Subject.ToString());
+            earlierCommand.Parameters.AddWithValue("@sequence",
+                previous.SourceSequence);
+            var earlierTimeText = earlierCommand.ExecuteScalar() as string
+                ?? throw new InvalidDataException("History predecessor source is missing.");
+            var earlierCommittedAt = DateTimeOffset.Parse(
+                earlierTimeText, CultureInfo.InvariantCulture);
             if (previous.Subject != proposed.Subject ||
                 previous.Key != proposed.Key ||
                 previous.SourceUtterance == proposed.SourceUtterance ||
-                source.CommittedAt <= earlier.CommittedAt)
+                source.CommittedAt <= earlierCommittedAt)
                 throw new InvalidDataException(
                     "Cannot reaffirm/correct another subject, key or earlier statement.");
 
