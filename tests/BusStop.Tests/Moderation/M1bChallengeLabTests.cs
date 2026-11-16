@@ -126,9 +126,9 @@ public sealed class M1bChallengeLabTests
         var (corpus, raw) = Fixture();
         var model = new Model((request, _) =>
             ModelResponse.Responded("{invalid JSON"));
-        var report = M1bChallengeLab.Run(corpus, raw, model, maxCases: 2, modelBudget: 1);
+        var report = M1bChallengeLab.Run(corpus, raw, model, maxCases: 2, modelBudget: 2);
 
-        Assert.Equal(1, model.Calls);
+        Assert.Equal(2, model.Calls);
         Assert.Equal(2, report.Summary.Unscorable);
         Assert.Equal(1, report.Summary.InvalidModelResponses);
         Assert.Equal(1, report.Summary.BudgetExhausted);
@@ -196,6 +196,40 @@ public sealed class M1bChallengeLabTests
         Assert.Equal(0, report.Summary.FalseNegative);
         Assert.Equal(0, report.Summary.FalsePositive);
         Assert.Equal("Finding", report.Cases[1].Predicted);
+    }
+
+    [Fact]
+    public void Unauthorized_evidence_is_unscorable_and_never_retried()
+    {
+        var (corpus, raw) = Fixture();
+        var model = new Model((request, _) =>
+            ModelResponse.Responded(JsonSerializer.Serialize(new
+            {
+                contractVersion = "shadow-m1-v1",
+                candidateId = Identity(request),
+                disposition = "RequestRevision",
+                severity = "High",
+                finding = new
+                {
+                    kind = "ContradictedFactualClaim",
+                    claimSpan = "Shiny pipes don't fix rusted foundations.",
+                    explanation = "Intentionally unauthorized reference in lab test.",
+                    evidenceReferences = new[] { "utterance:UNAUTHORIZED" },
+                    uncertain = false,
+                    narrowFeedback = "Fix it."
+                }
+            })));
+        var report = M1bChallengeLab.Run(corpus, raw, model,
+            maxCases: 1, modelBudget: 2);
+
+        Assert.Equal(1, model.Calls);
+        Assert.Equal(1, report.Summary.Unscorable);
+        Assert.Equal(1, report.Summary.InvalidModelResponses);
+        Assert.Equal(0, report.Summary.TrueNegative);
+        Assert.Equal(0, report.Summary.FalsePositive);
+        var c = Assert.Single(report.Cases);
+        Assert.Single(c.Attempts);
+        Assert.Equal(ShadowReviewStatus.InvalidResponse, c.Attempts[0].Status);
     }
 
     [Fact]
