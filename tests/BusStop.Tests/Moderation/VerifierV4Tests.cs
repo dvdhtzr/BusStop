@@ -531,6 +531,49 @@ public sealed class VerifierV4Tests
     }
 
     [Fact]
+    public void V3_optional_extraction_and_V4_verification_charge_one_shared_ledger()
+    {
+        var fixture = Setup();
+        using var db = fixture.Store;
+        var u = Speak(fixture, "The report counted 12 outages.");
+        var job = Job(u);
+        var permit = new V4SharedExtractionPermit(db);
+        var v3Policy = new VerificationSessionPolicy(
+            EvidenceVerifierV1.ContractVersion, VerificationOperatingMode.Shadow,
+            "v4-test", "pinned-v4-digest", 0.1, false,
+            V3ClaimDetector.RuleVersion, V3ModelClaimExtractor.PromptVersion,
+            V3EvidencePacketAssembler.RetrievalSelectorVersion, 8, 3);
+
+        var extractionModel = new ScriptedVerifier
+        {
+            Reply = _ => ModelResponse.Responded("""{"claims":[]}""")
+        };
+        var extraction = V3ModelClaimExtractor.Extract(
+            job, u, v3Policy, selectedForModel: true,
+            extractionModel, permit);
+        Assert.Equal(1, extraction.ModelAttempts);
+        Assert.Equal(V3ExtractionCoverage.ModelAugmented, extraction.Coverage);
+        Assert.Equal(1, db.GetV4AttemptCounts(job).UtteranceExtractionAttempts);
+        permit.FinalizeAttempt(job.SessionId, ModerationAttemptStatus.Completed);
+
+        var packets = new V3EvidencePacketAssembler(db).Assemble(
+            job, u, extraction);
+        var verifierModel = new ScriptedVerifier
+        {
+            Reply = _ => Reply(job, packets.Packets,
+                ClaimVerificationOutcome.NoMaterialIssue)
+        };
+        var report = new V4GroundedVerifier(db).Verify(
+            job, u, extraction, packets, verifierModel);
+        Assert.Equal(1, extractionModel.Calls);
+        Assert.Equal(1, verifierModel.Calls);
+        Assert.Equal(1, report.VerificationAttemptsThisRun);
+        Assert.Equal(2, db.GetV4AttemptCounts(job).UtteranceTotalAttempts);
+        Assert.Equal(2, db.GetV4AttemptCounts(job).SessionSharedAttempts);
+        Assert.Equal(1, report.Summary.NoMaterialIssues);
+    }
+
+    [Fact]
     public void Three_attempt_ceiling_includes_extraction_and_failed_requests_across_job_ids()
     {
         var fixture = Setup();
