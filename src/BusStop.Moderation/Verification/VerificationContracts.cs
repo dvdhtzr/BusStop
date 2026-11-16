@@ -17,6 +17,7 @@ public enum VerificationOperatingMode { Disabled, Shadow }
 public enum ClaimCategory { SourceFact, CharacterIdentity, PersonalHistory, DialogueAttribution, Other }
 public enum ClaimRhetoricalMode { Asserted, Quoted, Speculative, Conditional, Question, Humorous }
 public enum ClaimExtractionProvenance { HostRule, ModelProposed }
+public enum ClaimValidationStatus { Proposed, HostValidated }
 public enum EvidenceItemKind { Briefing, Passage, BioAnchor, History, Utterance }
 public enum EvidenceAuthorityTier
 {
@@ -79,7 +80,8 @@ public sealed record ClaimCandidate(
     string ClaimText,
     ClaimCategory Category,
     ClaimRhetoricalMode RhetoricalMode,
-    ClaimExtractionProvenance ExtractionProvenance);
+    ClaimExtractionProvenance ExtractionProvenance,
+    ClaimValidationStatus ValidationStatus = ClaimValidationStatus.Proposed);
 
 /// <summary>What the host has explicitly authorized at the original speech boundary.</summary>
 public sealed record VerificationEvidenceScope(
@@ -110,7 +112,8 @@ public sealed record EvidenceItem(
     string Excerpt,
     long AvailableAtBoundary,
     bool IsSuperseded = false,
-    string? SupersededByReference = null);
+    string? SupersededByReference = null,
+    DateTimeOffset? SourceRecordedAt = null);
 
 /// <summary>
 /// Canonically serialized as an ordered record, with evidence in host-selected order.
