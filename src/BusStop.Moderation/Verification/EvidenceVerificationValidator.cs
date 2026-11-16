@@ -281,9 +281,17 @@ public static class EvidencePacketFactory
     {
         if (packetId == Guid.Empty || content is null)
             throw new InvalidDataException("Packet ID and content are required.");
-        var json = Serialize(content);
+        if (content.Items is null)
+            throw new InvalidDataException("Packet evidence collection is required.");
+        // Detach from caller-owned lists/arrays. A frozen evidence packet cannot
+        // silently acquire a different item after the hash was calculated.
+        var frozen = content with
+        {
+            Items = Array.AsReadOnly(content.Items.ToArray())
+        };
+        var json = Serialize(frozen);
         return new EvidencePacket(
-            packetId, content, json, EvidenceVerificationValidator.Hash(json));
+            packetId, frozen, json, EvidenceVerificationValidator.Hash(json));
     }
 
     internal static string Serialize(EvidencePacketContent content) =>
