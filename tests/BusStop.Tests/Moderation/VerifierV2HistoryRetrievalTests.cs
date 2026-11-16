@@ -120,7 +120,7 @@ public sealed class VerifierV2HistoryRetrievalTests
     }
 
     [Fact]
-    public void Other_persons_private_anchors_are_never_part_of_speaker_scope()
+    public void Shareable_and_private_other_character_anchors_are_not_visible_without_proven_delivery()
     {
         using var db = Open();
         var a = Profile("Arthur");
@@ -140,11 +140,13 @@ public sealed class VerifierV2HistoryRetrievalTests
         var target = Speak(db, session, a, "Bea said she is a violinist.");
         var seen = db.SelectVerifierEvidence(
             Job(target), target, ClaimCategory.CharacterIdentity, b.Id);
-        Assert.Single(seen.Scope.AuthorizedItems);
-        Assert.Contains(seen.Scope.AuthorizedItems.Values,
-            x => x.Excerpt.Contains("violinist", StringComparison.Ordinal));
+        // SharedWithRoom authorizes possible future DISCLOSURE, but the current
+        // participant context never delivers other-character anchor values.
+        Assert.Empty(seen.Scope.AuthorizedItems);
         Assert.DoesNotContain(seen.Scope.AuthorizedItems.Values,
             x => x.Excerpt.Contains("daughter", StringComparison.Ordinal));
+        Assert.DoesNotContain(seen.Scope.AuthorizedItems.Values,
+            x => x.Excerpt.Contains("violinist", StringComparison.Ordinal));
 
         Assert.Throws<InvalidDataException>(() => db.SelectVerifierEvidence(
             Job(target), target, ClaimCategory.CharacterIdentity, CharacterId.New()));
