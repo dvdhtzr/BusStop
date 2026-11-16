@@ -250,6 +250,7 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
                     {
                         status = ShadowReviewStatus.InvalidResponse;
                         failure = ex.Message;
+                        mayRetry = ex is FormatException or KeyNotFoundException;
                     }
                 }
             }

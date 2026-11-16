@@ -411,6 +411,61 @@ public sealed class ShadowModeratorTests : IDisposable
         Assert.Equal(2, Assert.Single(reopened.GetShadowReviews(session)).Attempts!.Count);
     }
 
+    private sealed class OutOfScopeModerator : IModelClient
+    {
+        public int Calls { get; private set; }
+        public string ModelName => "local-moderator";
+        public string ModelDigest => "local-digest";
+
+        public ModelResponse Decide(ModelRequest request, CancellationToken token = default)
+        {
+            Calls++;
+            var id = Regex.Match(request.Prompt,
+                @"Candidate ID: (?<id>[a-f0-9-]{36})", RegexOptions.IgnoreCase)
+                .Groups["id"].Value;
+            return ModelResponse.Responded(JsonSerializer.Serialize(new
+            {
+                contractVersion = ShadowResponseParser.ContractVersion,
+                candidateId = id,
+                disposition = "RequestRevision",
+                severity = "High",
+                finding = new
+                {
+                    kind = "UnestablishedAutobiography",
+                    claimSpan = "My father worked for the FAA.",
+                    explanation = "Fabricated citation that must fail host authorization.",
+                    evidenceReferences = new[] { "utterance:UNAUTHORIZED" },
+                    uncertain = false,
+                    narrowFeedback = "Reject out of scope reference."
+                }
+            }));
+        }
+    }
+
+    [Fact]
+    public async Task Host_scope_violation_is_not_retried_or_used_to_modify_speech()
+    {
+        using var store = Open();
+        var (session, cast) = Seed(store, Policy(calls: 4));
+        var moderator = new OutOfScopeModerator();
+        var observer = new ShadowModerationWorker(
+            _path, session, store.GetModerationPolicy(session), moderator,
+            cast, _briefing, sampleEvery: 1, queueCapacity: 4);
+        new ConversationEngine(store, new StubModelClient(new[]
+        {
+            StubResponses.Speak("My father worked for the FAA.")
+        }), new ParticipantContextBuilder(), session, cast, _briefing,
+            new EngineOptions(MaxOpportunities: 1), shadowSink: observer).Run();
+        await observer.DrainAsync();
+
+        Assert.Equal(1, moderator.Calls);
+        Assert.Single(store.GetModeratorReservations(session));
+        var review = Assert.Single(store.GetShadowReviews(session));
+        Assert.Equal(ShadowReviewStatus.InvalidResponse, review.Status);
+        Assert.Single(review.Attempts!);
+        Assert.Single(store.GetCommittedUtterances(session));
+    }
+
     [Fact]
     public void Shadow_policy_without_observer_is_rejected_before_running()
     {
