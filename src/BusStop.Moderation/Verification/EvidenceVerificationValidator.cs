@@ -87,6 +87,25 @@ public static class EvidenceVerificationValidator
             "Claim span must be the exact committed UTF-16 substring.");
     }
 
+    /// <summary>
+    /// Validate the full claim set without discarding overlapping but distinct
+    /// propositions. Claim IDs and indices must identify one candidate each.
+    /// </summary>
+    public static void ValidateClaims(
+        IReadOnlyList<ClaimCandidate> claims,
+        VerificationJobIdentity job, Utterance committed)
+    {
+        Require(claims is not null, "Missing extracted claim set.");
+        var ids = new HashSet<Guid>();
+        var indices = new HashSet<int>();
+        foreach (var claim in claims)
+        {
+            ValidateClaim(claim, job, committed);
+            Require(ids.Add(claim.ClaimId) && indices.Add(claim.Index),
+                "Duplicate claim ID or claim index.");
+        }
+    }
+
     public static void ValidatePacket(
         EvidencePacket packet,
         ClaimCandidate claim,
