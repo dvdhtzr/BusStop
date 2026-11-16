@@ -22,6 +22,8 @@ public static class V4HostReconciler
             assembly?.Packets is null || assembly.OmittedClaimIds is null ||
             results is null || chargedRequestIds is null ||
             verificationAttemptsThisRun is < 0 or > EvidenceVerifierV4.MaxVerificationCalls ||
+            extraction.ModelAttempts is < 0 or > EvidenceVerifierV4.MaxExtractionCalls ||
+            extraction.ModelAttempts + verificationAttemptsThisRun > EvidenceVerifierV4.MaxTotalCalls ||
             chargedRequestIds.Count != verificationAttemptsThisRun ||
             chargedRequestIds.Any(id => id == Guid.Empty) ||
             chargedRequestIds.Distinct().Count() != chargedRequestIds.Count)
@@ -65,6 +67,9 @@ public static class V4HostReconciler
                     !Enum.IsDefined(typeof(ClaimVerificationOutcome), result.Judgment.Outcome))
                     throw new InvalidDataException("Completed judgment no longer matches its packet.");
 
+                // Even direct use of this pure reconciler cannot promote an
+                // invalid authority lane into a material issue.
+                V4JudgmentParser.ValidateLaneAuthority(result.Judgment, package);
                 verified++;
                 switch (result.Judgment.Outcome)
                 {
