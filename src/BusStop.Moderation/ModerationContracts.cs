@@ -36,7 +36,11 @@ public enum ModerationInferencePurpose
     RevisionReevaluation,
     MaterialViolationReview,
     StagnationReview,
-    ShadowSampling
+    ShadowSampling,
+    // New V4 phases use the existing shared reservation table without
+    // changing any historical M1 purpose values or moderation judgments.
+    VerifierClaimExtraction,
+    VerifierClaimVerification
 }
 
 public enum ModerationAttemptStatus
