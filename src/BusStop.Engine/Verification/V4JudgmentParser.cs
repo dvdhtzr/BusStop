@@ -169,6 +169,19 @@ public static class V4JudgmentParser
                                       !AuthoritativeForConflict(item, claim.Category)))
                 throw new InvalidDataException(
                     "Conflicting evidence requires non-superseded, lane-relevant sources.");
+
+            // References to two EXCERPTS from one snapshot (or two anchor keys
+            // in one profile) are not two independent sources. The briefing
+            // plus its own pinned passages is also one underlying source.
+            var supportingSources = judgment.SupportingReferences
+                .Select(reference => items[reference].SourceId)
+                .ToHashSet(StringComparer.Ordinal);
+            var opposingSources = judgment.OpposingReferences
+                .Select(reference => items[reference].SourceId)
+                .ToHashSet(StringComparer.Ordinal);
+            if (supportingSources.Overlaps(opposingSources))
+                throw new InvalidDataException(
+                    "Competing evidence may not come from the same source identity.");
         }
     }
 
@@ -179,7 +192,7 @@ public static class V4JudgmentParser
         return category switch
         {
             ClaimCategory.SourceFact =>
-                item.Kind is EvidenceItemKind.Briefing or EvidenceItemKind.Passage &&
+                (item.Kind is EvidenceItemKind.Briefing or EvidenceItemKind.Passage) &&
                 item.AuthorityTier == EvidenceAuthorityTier.SourceSnapshot,
             ClaimCategory.CharacterIdentity =>
                 item.Kind == EvidenceItemKind.BioAnchor &&
@@ -203,7 +216,7 @@ public static class V4JudgmentParser
         return category switch
         {
             ClaimCategory.SourceFact =>
-                item.Kind is EvidenceItemKind.Briefing or EvidenceItemKind.Passage &&
+                item.Kind == EvidenceItemKind.Passage &&
                 item.AuthorityTier == EvidenceAuthorityTier.SourceSnapshot,
             ClaimCategory.CharacterIdentity =>
                 item.Kind == EvidenceItemKind.BioAnchor &&
