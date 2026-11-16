@@ -86,7 +86,14 @@ public sealed class OllamaAdapter : IModelClient, IDisposable
         {
             using var response = _http.PostAsJsonAsync("/api/generate", body, cancellationToken).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
-                return ModelResponse.TransportError();
+            {
+                var detail = awaitlessRead(response, cancellationToken);
+                return ModelResponse.TransportError() with
+                {
+                    TransportDetail = $"HTTP {(int)response.StatusCode}: " +
+                        (detail.Length > 500 ? detail[..500] : detail)
+                };
+            }
 
             var payload = response.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
             using var doc = JsonDocument.Parse(payload);
@@ -126,6 +133,10 @@ public sealed class OllamaAdapter : IModelClient, IDisposable
             return ModelResponse.TransportError();
         }
     }
+
+    private static string awaitlessRead(HttpResponseMessage response,
+        CancellationToken cancellationToken) =>
+        response.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
 
     private string? TryGetDigest(string model)
     {

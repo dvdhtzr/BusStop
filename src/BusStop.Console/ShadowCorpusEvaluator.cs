@@ -27,7 +27,7 @@ public static class ShadowCorpusEvaluator
             throw new InvalidDataException("FAA corpus must contain all 33 historical reviews.");
 
         int reviewed = 0, invalid = 0, incompleteJson = 0;
-        int allowed = 0, flaggedAllow = 0, revisionAllow = 0;
+        int allowed = 0, validAllowed = 0, flaggedAllow = 0, revisionAllow = 0;
         int uncertain = 0, exact = 0, exactDetected = 0;
         for (var i = 0; i < reviews.Length; i++)
         {
@@ -66,6 +66,7 @@ public static class ShadowCorpusEvaluator
             {
                 case "Allow":
                     allowed++;
+                    if (valid) validAllowed++;
                     if (valid && hasFinding) flaggedAllow++;
                     if (valid && isRevision) revisionAllow++;
                     break;
@@ -96,6 +97,7 @@ public static class ShadowCorpusEvaluator
             structuredInvalid = invalid,
             incompleteJson,
             provisionalAllowCases = allowed,
+            structurallyValidProvisionalAllowCases = validAllowed,
             falseFindingsOnProvisionalAllow = flaggedAllow,
             falseRevisionsOnProvisionalAllow = revisionAllow,
             needsHumanReview = uncertain,

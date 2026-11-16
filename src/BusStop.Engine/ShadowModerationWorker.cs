@@ -221,7 +221,7 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
                     string.IsNullOrWhiteSpace(raw))
                 {
                     status = ShadowReviewStatus.TransportFailure;
-                    failure = response.Transport.ToString();
+                    failure = response.TransportDetail ?? response.Transport.ToString();
                 }
                 else
                 {

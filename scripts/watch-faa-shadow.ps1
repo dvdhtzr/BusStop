@@ -6,7 +6,7 @@ param(
     [int]$Opportunities = 90,
     [int]$ParticipantCalls = 180,
     [int]$EndAfterPasses = 9,
-    [int]$ModeratorCalls = 36,
+    [int]$ModeratorCalls = 96,
     [int]$SampleEvery = 3
 )
 $ErrorActionPreference = 'Stop'

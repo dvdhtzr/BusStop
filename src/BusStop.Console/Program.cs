@@ -331,7 +331,17 @@ foreach (var (mode, label, briefing) in plan)
                 notSelected = shadowWorker.NotSelected,
                 dropped = shadowWorker.Dropped,
                 audited = shadowWorker.Written,
-                workerErrors = shadowWorker.Errors
+                workerErrors = shadowWorker.Errors,
+                deterministicExactCopies = reviews.Count(r =>
+                    r.RequestId is null &&
+                    r.Judgment?.Finding?.Kind == ModerationIssueKind.ExactDuplicate),
+                modelValidReviews = reviews.Count(r =>
+                    r.Attempts is { Count: > 0 } &&
+                    r.Status == ShadowReviewStatus.Reviewed),
+                modelInvalidReviews = reviews.Count(r =>
+                    r.Attempts is { Count: > 0 } &&
+                    r.Status == ShadowReviewStatus.InvalidResponse),
+                chargedModeratorAttempts = store.GetModeratorReservations(session).Count
             },
             reviews,
             reservations = store.GetModeratorReservations(session)

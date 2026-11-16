@@ -34,6 +34,7 @@ public enum ModelTransport
 public sealed record ModelResponse(ModelTransport Transport, string? RawJson)
 {
     public ModelGenerationTelemetry? Generation { get; init; }
+    public string? TransportDetail { get; init; }
 
     public static ModelResponse Responded(string rawJson) => new(ModelTransport.Responded, rawJson);
     public static ModelResponse Timeout() => new(ModelTransport.Timeout, null);
