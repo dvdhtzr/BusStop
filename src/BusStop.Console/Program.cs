@@ -28,6 +28,124 @@ string? Arg(string name)
     return i >= 0 && i + 1 < argv.Length ? argv[i + 1] : null;
 }
 
+// M1b is a separate, synthetic evaluation process. It deliberately cannot
+// start a participant session, read the private FAA audit, or write to SQLite.
+if (argv.Contains("--m1b-challenge-check") || argv.Contains("--m1b-challenge-run"))
+{
+    var check = argv.Contains("--m1b-challenge-check");
+    var run = argv.Contains("--m1b-challenge-run");
+    var approved = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "--m1b-challenge-check", "--m1b-challenge-run",
+        "--challenge-corpus", "--challenge-limit", "--challenge-budget",
+        "--moderator-model", "--ollama-url", "--moderator-timeout", "--out"
+    };
+    if (check == run || argv.Where(x => x.StartsWith("--", StringComparison.Ordinal))
+        .Any(x => !approved.Contains(x)))
+    {
+        System.Console.Error.WriteLine(
+            "M1b lab cannot be combined with conversation, session, or enforcement flags.");
+        return 2;
+    }
+
+    try
+    {
+        var corpusPath = Arg("--challenge-corpus") ??
+            Path.Combine("docs", "moderator", "corpus", "m1b-challenges-v1.json");
+        var corpusText = File.ReadAllText(corpusPath);
+        var corpus = M1bChallengeLab.Load(corpusText);
+
+        if (check)
+        {
+            System.Console.WriteLine("VALID: " + corpus.Version + " with " +
+                corpus.Cases.Length + " synthetic cases.");
+            System.Console.WriteLine("Labels: " + corpus.LabelStatus);
+            foreach (var group in corpus.Cases.GroupBy(x => x.Expected))
+                System.Console.WriteLine("  " + group.Key + ": " + group.Count());
+            System.Console.WriteLine(
+                "Validation only: no Ollama, participant session, or database.");
+            return 0;
+        }
+
+        static int Bounded(string? value, int defaultValue, int maximum,
+            string name)
+        {
+            if (value is null) return defaultValue;
+            if (!int.TryParse(value, out var count) ||
+                count < 1 || count > maximum)
+                throw new ArgumentException(name + " must be 1.." + maximum);
+            return count;
+        }
+
+        var limit = Bounded(Arg("--challenge-limit"), 36, 36, "--challenge-limit");
+        var budget = Bounded(Arg("--challenge-budget"), 72, 72, "--challenge-budget");
+        var timeout = Bounded(Arg("--moderator-timeout"), 180, 3600, "--moderator-timeout");
+        var outPath = Arg("--out");
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new ArgumentException(
+                "--out is required; use a PRIVATE folder outside the repository.");
+        var outputDir = Path.GetFullPath(outPath);
+        var repoRoot = Path.GetFullPath(Directory.GetCurrentDirectory());
+        if (outputDir.Equals(repoRoot, StringComparison.OrdinalIgnoreCase) ||
+            outputDir.StartsWith(repoRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException(
+                "M1b private results must be stored OUTSIDE the repository.");
+
+        var endpoint = Arg("--ollama-url") is { } address
+            ? new Uri(address) : null;
+        if (!OllamaAdapter.IsAvailable(endpoint))
+        {
+            System.Console.Error.WriteLine("Local Ollama is unreachable.");
+            return 2;
+        }
+        var model = Arg("--moderator-model") ?? "qwen3.5:9b";
+        using var moderator = new OllamaAdapter(
+            model, endpoint, temperature: 0.1,
+            timeout: TimeSpan.FromSeconds(timeout), think: false);
+        if (moderator.ModelDigest == "unknown")
+            throw new InvalidOperationException(
+                "Moderator model digest unavailable; refusing unpinned evaluation.");
+
+        System.Console.WriteLine("M1b synthetic lab: " + limit + " cases, at most " +
+            budget + " moderator calls. Model " + moderator.ModelName);
+        var result = M1bChallengeLab.Run(
+            corpus, corpusText, moderator, maxCases: limit, modelBudget: budget);
+
+        Directory.CreateDirectory(outputDir);
+        var reportPath = Path.Combine(outputDir, "m1b-challenges-" +
+            DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" +
+            Guid.NewGuid().ToString("N")[..8] + ".json");
+        using (var stream = new FileStream(
+            reportPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            JsonSerializer.Serialize(stream, result,
+                new JsonSerializerOptions { WriteIndented = true });
+
+        var s = result.Summary;
+        System.Console.WriteLine("Valid model reviews: " + s.ValidModelResponses +
+            "; invalid: " + s.InvalidModelResponses +
+            "; transport failures: " + s.TransportFailures);
+        System.Console.WriteLine("True positives: " + s.TruePositive +
+            "; false positives: " + s.FalsePositive +
+            "; false negatives: " + s.FalseNegative +
+            "; true negatives: " + s.TrueNegative +
+            "; unscorable: " + s.Unscorable);
+        System.Console.WriteLine("Deterministic exact copies: " +
+            s.DeterministicCases + "; Ollama calls: " + s.ModelCalls);
+        System.Console.WriteLine("Private case-by-case report: " + reportPath);
+        System.Console.WriteLine(
+            "Provisional labels only. No enforcement or automatic promotion.");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+        InvalidDataException or JsonException or ArgumentException or
+        InvalidOperationException)
+    {
+        System.Console.Error.WriteLine("M1b evaluation failed: " + ex.Message);
+        return 2;
+    }
+}
+
 // Read-only evaluation of the private, historical FAA shadow audit.
 if (argv.Contains("--evaluate-shadow-audit"))
 {
