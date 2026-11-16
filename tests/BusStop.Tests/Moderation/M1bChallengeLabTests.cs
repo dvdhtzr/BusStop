@@ -305,7 +305,7 @@ public sealed class M1bChallengeLabTests
                 .GetProperty("items").GetProperty("enum")
                 .EnumerateArray().Select(x => x.GetString()).ToArray();
             var match = Regex.Match(request.Prompt,
-                @"\\[(briefing:[^\\]]+)\\]");
+                @"\[(briefing:[^\]]+)\]");
             Assert.True(match.Success);
             Assert.Contains(match.Groups[1].Value, entries);
             Assert.DoesNotContain(match.Groups[1].Value["briefing:".Length..], entries);
