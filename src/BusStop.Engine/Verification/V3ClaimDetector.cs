@@ -119,15 +119,23 @@ public static class V3ClaimDetector
                 "Utterance scan or candidate count was capped; remaining claims are unexamined.");
     }
 
-    public static V3ExactCopySignal? CheckExactCopy(string committedText,
+    public static V3ExactCopySignal? CheckExactCopy(
+        VerificationJobIdentity job, Utterance committed,
         VerificationEvidenceScope authorizedDialogue)
     {
-        if (committedText is null || authorizedDialogue?.AuthorizedItems is null)
-            throw new InvalidDataException("Missing copied text or authorized dialogue.");
+        EvidenceVerificationValidator.ValidateJob(job, committed);
+        if (authorizedDialogue?.AuthorizedItems is null ||
+            authorizedDialogue.SessionId != job.SessionId ||
+            authorizedDialogue.OpportunityId != job.OpportunityId ||
+            authorizedDialogue.SpeakerId != job.SpeakerId ||
+            authorizedDialogue.AsOfBoundary != job.CommittedBoundary)
+            throw new InvalidDataException("Exact-copy scope is not for this committed speaker/boundary.");
         return authorizedDialogue.AuthorizedItems.Values
             .Where(x => x.Kind == EvidenceItemKind.Utterance &&
                 x.Visibility == EvidenceVisibility.SharedDialogue &&
-                string.Equals(x.Excerpt, committedText, StringComparison.Ordinal))
+                x.AvailableAtBoundary <= job.CommittedBoundary &&
+                x.SourceId != job.UtteranceId.ToString() &&
+                string.Equals(x.Excerpt, committed.Text, StringComparison.Ordinal))
             .OrderBy(x => x.ReferenceId, StringComparer.Ordinal)
             .Select(x => new V3ExactCopySignal(x.ReferenceId, x.Excerpt))
             .FirstOrDefault();
