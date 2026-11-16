@@ -71,7 +71,7 @@ public static class ShadowResponseParser
 
     /// <summary>Pin the candidate identity in Ollama constrained decoding.
     /// Only the host validator determines whether generated evidence is authorized.</summary>
-    public static string JsonSchemaFor(Guid candidateId) => $"""
+    public static string JsonSchemaFor(Guid candidateId) => $$"""
         {
           "type": "object",
           "additionalProperties": false,
