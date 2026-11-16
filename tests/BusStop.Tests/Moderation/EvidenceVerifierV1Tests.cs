@@ -103,6 +103,15 @@ public sealed class EvidenceVerifierV1Tests
         Assert.Equal(f.Packet.Sha256, same.Sha256);
         Assert.NotEqual(f.Packet.PacketId, same.PacketId);
 
+        // Freeze must take a snapshot, not retain a mutable caller-owned array.
+        var input = new[] { f.Item };
+        var frozen = EvidencePacketFactory.Freeze(Guid.NewGuid(),
+            f.Packet.Content with { Items = input });
+        input[0] = input[0] with { Excerpt = "mutated after freezing" };
+        Assert.Equal(f.Item.Excerpt, frozen.Content.Items[0].Excerpt);
+        EvidenceVerificationValidator.ValidatePacket(
+            frozen, f.Claim, f.Job, f.Utterance, f.Scope);
+
         var judgment = Contradiction(f.Claim, f.Packet, f.Item.ReferenceId);
         EvidenceVerificationValidator.ValidateJudgment(
             judgment, f.Packet, f.Claim, f.Job, f.Utterance, f.Scope);
@@ -133,6 +142,14 @@ public sealed class EvidenceVerifierV1Tests
         Assert.Throws<InvalidDataException>(() =>
             EvidenceVerificationValidator.ValidateClaim(
                 f.Claim with { Category = (ClaimCategory)999 }, f.Job, f.Utterance));
+        // Even a claimed "host validated" status cannot bypass a forged span.
+        Assert.Throws<InvalidDataException>(() =>
+            EvidenceVerificationValidator.ValidateClaim(
+                f.Claim with
+                {
+                    ClaimText = "13 outages",
+                    ValidationStatus = ClaimValidationStatus.HostValidated
+                }, f.Job, f.Utterance));
         Assert.Throws<InvalidDataException>(() =>
             EvidenceVerificationValidator.ValidateJob(
                 f.Job with { UtteranceSha256 = new string('0', 64) }, f.Utterance));
