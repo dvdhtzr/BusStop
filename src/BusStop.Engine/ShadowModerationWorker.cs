@@ -139,36 +139,18 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
         // An exact copy is a mechanically provable condition. It needs no
         // moderator inference and consumes ZERO Ollama attempts/budget units.
         // Search all committed history, not just the model's recent window.
-        var copied = observation.PriorCommittedHistory.LastOrDefault(u =>
-            string.Equals(u.Text.Trim(), candidate.Text.Trim(),
-                StringComparison.OrdinalIgnoreCase));
-        if (copied is not null)
+        var duplicate = TryBuildExactCopy(candidate, observation.PriorCommittedHistory);
+        if (duplicate is { } exact)
         {
-            var priorRef = $"utterance:{copied.Id}";
-            var isOtherSpeaker = copied.Speaker != candidate.Speaker;
-            var kind = isOtherSpeaker ? "another participant" : "the same participant";
-            var duplicateFinding = new ModerationFinding(
-                ModerationIssueKind.ExactDuplicate, candidate.Text,
-                $"Verbatim repeat of an earlier committed utterance by {kind}.",
-                new[] { priorRef }, false,
-                "The original is already in the conversation.");
-            var duplicateJudgment = new ModerationJudgment(
-                candidate.CandidateId, ModerationDisposition.Advisory, duplicateFinding);
-            var refs = new[] { priorRef };
-            ModerationContractValidator.Validate(candidate,
-                new ModerationEvidenceScope(candidate.Session, candidate.Opportunity,
-                    candidate.Speaker, candidate.CommittedBoundary,
-                    refs.ToHashSet(StringComparer.Ordinal)), duplicateJudgment);
             store.AppendShadowReview(new ShadowReviewRecord(
                 candidate, observation.CommittedUtterance, item.Trigger,
-                refs, _model.ModelName, _model.ModelDigest, null,
-                ShadowReviewStatus.Reviewed, duplicateJudgment,
-                isOtherSpeaker ? ModeratorSeverity.Medium : ModeratorSeverity.Low,
+                new[] { exact.Reference }, _model.ModelName, _model.ModelDigest, null,
+                ShadowReviewStatus.Reviewed, exact.Parsed.Judgment, exact.Parsed.Severity,
                 null, null, DateTimeOffset.UtcNow,
                 Array.Empty<ShadowInferenceTrace>()));
             Interlocked.Increment(ref _written);
-            Emit($"[Moderator] {speaker.Name}: exact duplicate of {kind} " +
-                 $"(deterministic, no model call; SHADOW ONLY).");
+            Emit("[Moderator] " + speaker.Name + ": exact duplicate " +
+                 "(deterministic, no model call; SHADOW ONLY).");
             return;
         }
 
@@ -296,22 +278,58 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
             Emit($"[Moderator] {speaker.Name}: no material issue ({item.Trigger}).");
     }
 
+    /// <summary>Host-authoritative, model-free exact-copy evaluation used by both
+    /// the live worker and the isolated challenge lab. This does not rewrite speech.</summary>
+    public static (ShadowParsedJudgment Parsed, string Reference)? TryBuildExactCopy(
+        ModerationCandidate candidate, IReadOnlyList<Utterance> history)
+    {
+        var copied = history.LastOrDefault(u =>
+            string.Equals(u.Text.Trim(), candidate.Text.Trim(),
+                StringComparison.OrdinalIgnoreCase));
+        if (copied is null) return null;
+
+        var reference = "utterance:" + copied.Id;
+        var other = copied.Speaker != candidate.Speaker;
+        var finding = new ModerationFinding(
+            ModerationIssueKind.ExactDuplicate, candidate.Text,
+            "Verbatim repeat of an earlier committed utterance by " +
+                (other ? "another participant." : "the same participant."),
+            new[] { reference }, false, "The original is already in the conversation.");
+        var judgment = new ModerationJudgment(
+            candidate.CandidateId, ModerationDisposition.Advisory, finding);
+        var scope = new ModerationEvidenceScope(
+            candidate.Session, candidate.Opportunity, candidate.Speaker,
+            candidate.CommittedBoundary, new HashSet<string>(new[] { reference },
+                StringComparer.Ordinal));
+        ModerationContractValidator.Validate(candidate, scope, judgment);
+        return (new ShadowParsedJudgment(judgment,
+            other ? ModeratorSeverity.Medium : ModeratorSeverity.Low), reference);
+    }
+
     private (string Prompt, IReadOnlyList<string> Allowed) BuildPrompt(
-        ShadowObservation observation, CharacterProfile speaker, string trigger)
+        ShadowObservation observation, CharacterProfile speaker, string trigger) =>
+        BuildModeratorPrompt(observation, speaker, _cast, _briefing, _visiblePassageIds, trigger);
+
+    /// <summary>Exactly the same prompt and authorized evidence surface as the
+    /// live M1a worker. The M1b lab does not own a separate moderation prompt.</summary>
+    public static (string Prompt, IReadOnlyList<string> Allowed) BuildModeratorPrompt(
+        ShadowObservation observation, CharacterProfile speaker,
+        IReadOnlyDictionary<CharacterId, CharacterProfile> cast, Briefing briefing,
+        IReadOnlyList<string> visiblePassageIds, string trigger)
     {
         var c = observation.Candidate;
         var refs = new List<string>();
         var bio = $"bio:{speaker.Id}:v{speaker.Version}";
-        var briefing = $"briefing:{_briefing.Id}";
+        var briefing = $"briefing:{briefing.Id}";
         refs.Add(bio);
         refs.Add(briefing);
-        refs.AddRange(_visiblePassageIds);
+        refs.AddRange(visiblePassageIds);
         var lines = new StringBuilder();
         foreach (var utterance in observation.PriorCommittedHistory.TakeLast(10))
         {
             var reference = $"utterance:{utterance.Id}";
             refs.Add(reference);
-            var name = _cast.TryGetValue(utterance.Speaker, out var p)
+            var name = cast.TryGetValue(utterance.Speaker, out var p)
                 ? p.Name : "Participant";
             lines.AppendLine($"[{reference}] {name}: {utterance.Text}");
         }
@@ -337,10 +355,10 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
         sb.AppendLine($"Candidate ID: {c.CandidateId:D}");
         sb.AppendLine($"Speaker: {speaker.Name}");
         sb.AppendLine($"[{bio}] {speaker.Persona}; traits: {string.Join(", ", speaker.Traits)}");
-        sb.AppendLine($"[{briefing}] {_briefing.Title} — {_briefing.Source}");
-        sb.AppendLine(_briefing.Body);
-        if (_visiblePassageIds.Count > 0)
-            sb.AppendLine($"Authorized source passage references: {string.Join(", ", _visiblePassageIds)}");
+        sb.AppendLine($"[{briefing}] {briefing.Title} — {briefing.Source}");
+        sb.AppendLine(briefing.Body);
+        if (visiblePassageIds.Count > 0)
+            sb.AppendLine($"Authorized source passage references: {string.Join(", ", visiblePassageIds)}");
         sb.AppendLine("Prior COMMITTED dialogue (not private candidates):");
         sb.Append(lines.Length == 0 ? "(none)\n" : lines.ToString());
         sb.AppendLine();
