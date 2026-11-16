@@ -127,10 +127,18 @@ public sealed partial class ConversationStore
 
         var snapshot = GetEvidenceSnapshot(pin.SnapshotId)
             ?? throw new InvalidDataException("Pinned snapshot is missing.");
+        if (HashVerifierText(snapshot.SnapshotText) != snapshot.TextSha256)
+            throw new InvalidDataException("Pinned snapshot text was modified after capture.");
         foreach (var passageId in pin.ExposedPassageIds)
         {
             var passage = snapshot.Passages.SingleOrDefault(p => p.PassageId == passageId)
                 ?? throw new InvalidDataException("Pinned passage was not found.");
+            if (passage.StartOffset < 0 || passage.Length < 1 ||
+                passage.Length > snapshot.SnapshotText.Length - passage.StartOffset ||
+                !string.Equals(
+                    snapshot.SnapshotText.Substring(passage.StartOffset, passage.Length),
+                    passage.Text, StringComparison.Ordinal))
+                throw new InvalidDataException("Pinned passage content or offset was modified.");
             items.Add(new EvidenceItem(
                 "passage:" + passage.PassageId, EvidenceItemKind.Passage,
                 EvidenceAuthorityTier.SourceSnapshot,
@@ -186,7 +194,7 @@ public sealed partial class ConversationStore
                 .SingleOrDefault(u => u.Id == e.SourceUtterance);
             if (source is null || source.Speaker != job.SpeakerId ||
                 source.Sequence != e.SourceSequence ||
-                source.CommittedAt >= observed.CommittedAt ||
+                (!inCurrent && source.CommittedAt > observed.CommittedAt) ||
                 (inCurrent && source.Sequence > job.CommittedBoundary))
                 continue;
             eligible.Add((e, source));
@@ -233,9 +241,8 @@ public sealed partial class ConversationStore
 
         foreach (var u in GetCommittedUtterances(session.Id))
         {
-            if (u.Sequence > job.CommittedBoundary ||
-                u.Id == observed.Id ||
-                u.CommittedAt >= observed.CommittedAt) continue;
+            if (u.Sequence > job.CommittedBoundary || u.Id == observed.Id)
+                continue;
             items.Add(ToDialogueItem(u, availableAt: u.Sequence, ref clipped));
         }
     }
