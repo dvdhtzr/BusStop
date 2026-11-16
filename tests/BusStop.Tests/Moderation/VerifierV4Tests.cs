@@ -334,6 +334,164 @@ public sealed class VerifierV4Tests
     }
 
     [Fact]
+    public void Explicit_binding_anchor_can_support_a_private_identity_conflict()
+    {
+        var fixture = Setup();
+        using var db = fixture.Store;
+        db.SealVerifierAnchorSet(fixture.Speaker.Id, 1, new[]
+        {
+            new CharacterAnchor(fixture.Speaker.Id, 1,
+                "occupation", "retired machinist",
+                CharacterAnchorExposure.SubjectOnly)
+        }, "owner:approved-occupation");
+        db.PinVerifierCharacterVersion(
+            fixture.Session.Id, fixture.Speaker.Id, 1);
+
+        var u = Speak(fixture, "I am a commercial pilot.");
+        var job = Job(u);
+        var p = PrepareOne(fixture, u, job, ClaimCategory.CharacterIdentity);
+        Assert.Contains(p.Packets.Packets[0].Packet.Content.Items,
+            x => x.AuthorityTier == EvidenceAuthorityTier.BindingAnchor);
+
+        var model = new ScriptedVerifier
+        {
+            Reply = _ => Reply(job, p.Packets.Packets,
+                ClaimVerificationOutcome.ConfirmedContradiction,
+                package => package.Packet.Content.Items
+                    .Where(x => x.Kind == EvidenceItemKind.BioAnchor)
+                    .Select(x => x.ReferenceId).ToArray())
+        };
+        var result = new V4GroundedVerifier(db).Verify(
+            job, u, p.Extraction, p.Packets, model);
+        Assert.True(result.HasMaterialContradiction);
+        Assert.Equal(1, result.Summary.ConfirmedContradictions);
+        Assert.Equal(1, model.Calls);
+    }
+
+    [Fact]
+    public void Prior_heard_dialogue_can_support_an_attribution_dispute()
+    {
+        var fixture = Setup();
+        using var db = fixture.Store;
+        var earlier = Speak(fixture, "The plane landed on time.", fixture.Other);
+        var u = Speak(fixture, "Bea said the plane was delayed.");
+        var job = Job(u);
+        var p = PrepareOne(fixture, u, job, ClaimCategory.DialogueAttribution);
+        var model = new ScriptedVerifier
+        {
+            Reply = _ => Reply(job, p.Packets.Packets,
+                ClaimVerificationOutcome.ConfirmedContradiction,
+                package => package.Packet.Content.Items
+                    .Where(x => x.Kind == EvidenceItemKind.Utterance &&
+                                x.SourceId == earlier.Id.ToString())
+                    .Select(x => x.ReferenceId).ToArray())
+        };
+        var result = new V4GroundedVerifier(db).Verify(
+            job, u, p.Extraction, p.Packets, model);
+        Assert.True(result.HasMaterialContradiction);
+        Assert.Equal(1, result.Summary.ConfirmedContradictions);
+        Assert.Equal(1, model.Calls);
+    }
+
+    [Fact]
+    public void Competing_evidence_requires_independent_non_superseded_sources()
+    {
+        var f = Setup();
+        using var db = f.Store;
+        var u = Speak(f, "The report counted 12 outages.");
+        var job = Job(u);
+        var p = PrepareOne(f, u, job, ClaimCategory.SourceFact);
+        var original = p.Packets.Packets.Single();
+        var item = original.Packet.Content.Items.Single();
+
+        var second = item with
+        {
+            ReferenceId = "passage:second",
+            Kind = EvidenceItemKind.Passage,
+            SourceId = "second-independent-snapshot",
+            SourceSha256 = Hash("A separate source says 12 outages."),
+            SourceVersion = "second-source-v1",
+            Excerpt = "A separate source says 12 outages."
+        };
+        var firstPassage = item with
+        {
+            ReferenceId = "passage:first",
+            Kind = EvidenceItemKind.Passage,
+            SourceId = "first-independent-snapshot",
+            SourceSha256 = Hash("One source says 3 outages."),
+            SourceVersion = "first-source-v1",
+            Excerpt = "One source says 3 outages."
+        };
+        var content = original.Packet.Content with
+        {
+            Items = new[] { firstPassage, second }
+        };
+        var independentPacket = EvidencePacketFactory.Freeze(
+            Guid.NewGuid(), content);
+        var independent = original with { Packet = independentPacket };
+        var valid = new ClaimJudgment(
+            original.Claim.ClaimId, independentPacket.PacketId,
+            independentPacket.Sha256, ClaimVerificationOutcome.ConflictingEvidence,
+            new[] { second.ReferenceId }, new[] { firstPassage.ReferenceId },
+            "", "Two non-superseded source snapshots make different assertions.");
+        V4JudgmentParser.ValidateLaneAuthority(valid, independent);
+
+        var sameSource = EvidencePacketFactory.Freeze(
+            Guid.NewGuid(), content with
+            {
+                Items = new[]
+                {
+                    firstPassage,
+                    second with { SourceId = firstPassage.SourceId }
+                }
+            });
+        var same = independent with { Packet = sameSource };
+        var invalid = valid with
+        {
+            PacketId = sameSource.PacketId,
+            PacketSha256 = sameSource.Sha256
+        };
+        Assert.Throws<InvalidDataException>(() =>
+            V4JudgmentParser.ValidateLaneAuthority(invalid, same));
+
+        // V2 currently pins one snapshot, so two independent passages cannot
+        // yet be supplied in a real source lane. This remains a contract test
+        // for later authorized multi-source delivery (e.g. future research).
+    }
+
+    [Fact]
+    public void Extra_confidence_fields_cannot_be_promoted_as_a_factual_verdict()
+    {
+        var fixture = Setup();
+        using var db = fixture.Store;
+        var u = Speak(fixture, "The report counted 12 outages.");
+        var job = Job(u);
+        var p = PrepareOne(fixture, u, job, ClaimCategory.SourceFact);
+        var packet = p.Packets.Packets.Single();
+        var malicious = JsonSerializer.Serialize(new
+        {
+            jobId = job.JobId.ToString("D"),
+            judgments = new[]
+            {
+                new
+                {
+                    claimId = packet.Claim.ClaimId.ToString("D"),
+                    packetId = packet.Packet.PacketId.ToString("D"),
+                    packetSha256 = packet.Packet.Sha256,
+                    outcome = "NoMaterialIssue",
+                    supportingReferences = Array.Empty<string>(),
+                    opposingReferences = Array.Empty<string>(),
+                    problematicText = "",
+                    explanation = "I am certain.",
+                    confidence = 0.999
+                }
+            }
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V4JudgmentParser.Parse(malicious, job, u, p.Packets.Packets));
+    }
+
+    [Fact]
     public void Session_and_utterance_budgets_share_the_legacy_moderator_table()
     {
         var m1 = ModerationSessionPolicy.Disabled with
