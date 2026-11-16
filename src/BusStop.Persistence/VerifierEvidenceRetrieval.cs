@@ -64,7 +64,7 @@ public sealed partial class ConversationStore
             case ClaimCategory.PersonalHistory:
                 universe = targetSubject == job.SpeakerId
                     ? "speaker's pinned anchors and reviewed/provisional own-history events as of speech"
-                    : "room-shared typed anchors for the named participant only";
+                    : "no other-character anchor exposure is proven by current participant context";
                 AddAnchors(session, targetSubject, job.SpeakerId, choices, ref clipped);
                 if (targetSubject == job.SpeakerId)
                     AddOwnHistory(session, observed, job, choices, ref clipped);
@@ -153,13 +153,16 @@ public sealed partial class ConversationStore
     private void AddAnchors(Session session, CharacterId subject,
         CharacterId speaker, List<EvidenceItem> items, ref bool clipped)
     {
+        // A SharedWithRoom declaration means disclosure is PERMITTED, not that
+        // it happened. ParticipantContextBuilder currently supplies only own
+        // persona and the other characters' public handles. Until a future
+        // explicit exposure event proves delivery, another person's anchors
+        // are not authorized evidence, even if marked shareable.
+        if (subject != speaker)
+            return;
+
         foreach (var anchor in GetPinnedVerifierAnchors(session.Id, subject))
         {
-            // Private other-character identity must not leak to the speaker.
-            if (subject != speaker &&
-                anchor.Exposure != CharacterAnchorExposure.SharedWithRoom)
-                continue;
-
             var raw = anchor.Key + ": " + anchor.Value;
             items.Add(new EvidenceItem(
                 $"anchor:{subject}:{anchor.ProfileVersion}:{anchor.Key}",
