@@ -221,30 +221,32 @@ public sealed class V4GroundedVerifier
                 charged++;
                 chargedIds.Add(requestId);
                 ModelResponse? response = null;
-                bool threw = false;
+                bool dispatchReturned = false;
                 try
                 {
                     response = model.Decide(new ModelRequest(
                         job.SpeakerId, prompt, V4JudgmentParser.JsonSchema,
                         policy.MaxGeneratedTokens, policy.ContextTokens),
                         cancellationToken);
+                    dispatchReturned = true;
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    threw = true;
                     lastFailure = VerificationOperationalStatus.TransportFailure;
                     lastDetail = "Verifier model invocation failed or was interrupted.";
                 }
                 finally
                 {
-                    // A crash between dispatch and this statement leaves a
-                    // Reserved request CHARGED. V5 will implement recovery.
+                    // Even an uncaught fatal error or abrupt stop must never
+                    // be treated as a successfully finalized inference.
+                    // A process crash leaves the Reserved ID CHARGED; V5
+                    // implements staged recovery without replaying the call.
                     _store.FinalizeModeratorAttempt(job.SessionId, requestId,
-                        threw ? ModerationAttemptStatus.Interrupted :
-                            ModerationAttemptStatus.Completed);
+                        dispatchReturned ? ModerationAttemptStatus.Completed :
+                            ModerationAttemptStatus.Interrupted);
                 }
 
-                if (!threw)
+                if (dispatchReturned)
                 {
                     if (response?.Transport != ModelTransport.Responded)
                     {
