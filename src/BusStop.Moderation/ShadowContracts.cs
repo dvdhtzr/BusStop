@@ -84,7 +84,7 @@ public static class ShadowResponseParser
                 .OrderBy(r => r, StringComparer.Ordinal)
                 .ToArray());
 
-        return $"""
+        return $$"""
         {
           "type": "object",
           "additionalProperties": false,
