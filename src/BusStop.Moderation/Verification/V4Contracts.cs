@@ -80,10 +80,29 @@ public sealed record V4AttemptCounts(
 /// <summary>
 /// Host-reconciled claim results, with no LLM summary or secret acceptance flag.
 /// </summary>
+/// <summary>
+/// Private per-attempt troubleshooting metadata. The model response body is
+/// deliberately excluded: owner audit can identify structural failures without
+/// copying untrusted source text into logs or participant-visible records.
+/// </summary>
+public sealed record V4AttemptDiagnostic(
+    Guid RequestId,
+    VerificationOperationalStatus Status,
+    string Detail,
+    string? DoneReason,
+    int? PromptEvalCount,
+    int? EvalCount,
+    int ResponseCharacterCount,
+    string? ResponseSha256);
+
 public sealed record V4ReviewReport(
     VerificationJobIdentity Job,
     IReadOnlyList<VerificationClaimResult> ClaimResults,
     VerificationObservationSummary Summary,
     int VerificationAttemptsThisRun,
     IReadOnlyList<Guid> ChargedRequestIds,
-    bool HasMaterialContradiction);
+    bool HasMaterialContradiction)
+{
+    public IReadOnlyList<V4AttemptDiagnostic> AttemptDiagnostics { get; init; } =
+        Array.Empty<V4AttemptDiagnostic>();
+}
