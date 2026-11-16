@@ -123,6 +123,15 @@ public static class V3ModelClaimExtractor
                 Detail = "Reserved model extraction did not return a valid transport response."
             };
 
+        if (string.Equals(response.Generation?.DoneReason, "length",
+                StringComparison.OrdinalIgnoreCase))
+            return baseline with
+            {
+                Coverage = V3ExtractionCoverage.ModelInvalidResponse,
+                ModelAttempts = 1,
+                Detail = "Model extraction hit the generation limit."
+            };
+
         try
         {
             var candidates = ParseProposals(response.RawJson, job, utterance);
@@ -149,7 +158,8 @@ public static class V3ModelClaimExtractor
                 baseline.SelectionComplete && sorted.Length <= V3ClaimDetector.MaxCandidates,
                 "Constrained model proposals are exact-span host validated, not fact-checked.");
         }
-        catch (Exception ex) when (ex is JsonException or InvalidDataException or FormatException)
+        catch (Exception ex) when (ex is JsonException or InvalidDataException or
+            FormatException or InvalidOperationException or OverflowException or ArgumentException)
         {
             return baseline with
             {
@@ -220,6 +230,12 @@ public static class V3ModelClaimExtractor
                 throw new InvalidDataException("Unknown claim category or rhetorical mode.");
             if (!unique.Add((start, length, category)))
                 throw new InvalidDataException("Duplicate model claim span/category.");
+
+            // A model may suggest a rhetorical label but cannot relabel a
+            // mechanically obvious question/quotation/joke as an assertion.
+            var hostMode = V3ClaimDetector.ClassifyMode(utterance.Text, start, length);
+            if (hostMode != ClaimRhetoricalMode.Asserted)
+                mode = hostMode;
 
             proposals.Add(V3ClaimDetector.MakeCandidate(
                 job, utterance, proposals.Count, start, length, category, mode,
