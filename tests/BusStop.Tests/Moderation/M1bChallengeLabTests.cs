@@ -285,6 +285,40 @@ public sealed class M1bChallengeLabTests
     }
 
     [Fact]
+    public void Lab_sends_production_guidance_and_scoped_enum_without_gold_labels()
+    {
+        var (corpus, raw) = Fixture();
+        var model = new Model((request, _) =>
+        {
+            Assert.Contains("compare the", request.Prompt, StringComparison.Ordinal);
+            Assert.Contains("stated numbers", request.Prompt, StringComparison.Ordinal);
+            Assert.Contains("Metaphor, simile, hypothetical", request.Prompt,
+                StringComparison.Ordinal);
+            Assert.Contains("Bare GUIDs are NOT valid references.", request.Prompt,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("Expected: Finding", request.Prompt,
+                StringComparison.Ordinal);
+            using var schema = JsonDocument.Parse(request.JsonSchema!);
+            var entries = schema.RootElement.GetProperty("properties")
+                .GetProperty("finding").GetProperty("anyOf")[1]
+                .GetProperty("properties").GetProperty("evidenceReferences")
+                .GetProperty("items").GetProperty("enum")
+                .EnumerateArray().Select(x => x.GetString()).ToArray();
+            var match = Regex.Match(request.Prompt,
+                @"\\[(briefing:[^\\]]+)\\]");
+            Assert.True(match.Success);
+            Assert.Contains(match.Groups[1].Value, entries);
+            Assert.DoesNotContain(match.Groups[1].Value["briefing:".Length..], entries);
+            return Accept(request);
+        });
+        var result = M1bChallengeLab.Run(corpus, raw, model,
+            maxCases: 2, modelBudget: 4);
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(1, result.Summary.FalseNegative); // Always-Accept is exposed.
+        Assert.Equal(1, result.Summary.TrueNegative);
+    }
+
+    [Fact]
     public void Corpus_rejects_label_swaps_or_invalid_copy_controls()
     {
         var (corpus, _) = Fixture();

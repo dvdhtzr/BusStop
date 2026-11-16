@@ -338,7 +338,8 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
         sb.AppendLine("You are an INVISIBLE SHADOW observer, never a participant.");
         sb.AppendLine("Audit ONE already committed utterance. Never rewrite dialogue.");
         sb.AppendLine("Default to Accept and finding=null. Only flag a SPECIFIC material issue.");
-        sb.AppendLine("For direct factual claims attributed to the briefing, compare the");
+        sb.AppendLine("For concrete claims about the reported event (whether or not the");
+        sb.AppendLine("speaker explicitly says 'the briefing says'), compare the");
         sb.AppendLine("actual assertion with stated numbers, dates, durations, crash or");
         sb.AppendLine("injury outcomes, technical causes and actions. A clear contradiction");
         sb.AppendLine("is a material ContradictedFactualClaim; do not Accept it by default.");

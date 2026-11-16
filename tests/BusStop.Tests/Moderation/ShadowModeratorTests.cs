@@ -320,6 +320,55 @@ public sealed class ShadowModeratorTests : IDisposable
     }
 
     [Fact]
+    public void Scoped_ollama_schema_lists_exact_authorized_references_not_bare_ids()
+    {
+        var candidateId = Guid.NewGuid();
+        var briefing = "briefing:" + Guid.NewGuid().ToString("D");
+        var bio = "bio:arthur:v1";
+        var utterance = "utterance:" + Guid.NewGuid().ToString("D");
+        var references = new[] { utterance, bio, briefing, bio };
+        using var schema = JsonDocument.Parse(
+            ShadowResponseParser.JsonSchemaFor(candidateId, references));
+        var entries = schema.RootElement.GetProperty("properties")
+            .GetProperty("finding").GetProperty("anyOf")[1]
+            .GetProperty("properties").GetProperty("evidenceReferences")
+            .GetProperty("items").GetProperty("enum")
+            .EnumerateArray()
+            .Select(x => x.GetString()).ToArray();
+
+        Assert.Equal(3, entries.Length);
+        Assert.Contains(briefing, entries);
+        Assert.Contains(bio, entries);
+        Assert.Contains(utterance, entries);
+        Assert.DoesNotContain(briefing[("briefing:".Length)..], entries);
+        Assert.Equal(candidateId.ToString("D"),
+            schema.RootElement.GetProperty("properties")
+                .GetProperty("candidateId").GetProperty("enum")[0].GetString());
+    }
+
+    [Fact]
+    public void Scoped_schema_escapes_untrusted_references_and_handles_empty_scope()
+    {
+        const string untrusted = "utterance:quote\\\"\\ncomma, brace }";
+        using var schema = JsonDocument.Parse(
+            ShadowResponseParser.JsonSchemaFor(Guid.NewGuid(),
+                new[] { untrusted }));
+        var enumerated = schema.RootElement.GetProperty("properties")
+            .GetProperty("finding").GetProperty("anyOf")[1]
+            .GetProperty("properties").GetProperty("evidenceReferences")
+            .GetProperty("items").GetProperty("enum")[0].GetString();
+        Assert.Equal(untrusted, enumerated);
+
+        using var empty = JsonDocument.Parse(
+            ShadowResponseParser.JsonSchemaFor(Guid.NewGuid(),
+                Array.Empty<string>()));
+        Assert.Empty(empty.RootElement.GetProperty("properties")
+            .GetProperty("finding").GetProperty("anyOf")[1]
+            .GetProperty("properties").GetProperty("evidenceReferences")
+            .GetProperty("items").GetProperty("enum").EnumerateArray());
+    }
+
+    [Fact]
     public async Task Exact_cross_speaker_copy_is_identified_without_ollama_even_after_budget()
     {
         using var store = Open();
