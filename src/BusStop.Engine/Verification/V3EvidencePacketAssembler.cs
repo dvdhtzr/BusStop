@@ -130,13 +130,7 @@ public sealed class V3EvidencePacketAssembler
                         ? EvidenceCompletenessStatus.Partial
                         : EvidenceCompletenessStatus.CompleteForDeclaredScope,
                 ExcludedRanges = cut
-                    ? ("Some authorized evidence omitted by V3 packet limits" +
-                        (baseCompleteness.ExcludedRanges is null ? "" :
-                            "; " + baseCompleteness.ExcludedRanges))[..Math.Min(
-                                1_024,
-                                "Some authorized evidence omitted by V3 packet limits".Length +
-                                (baseCompleteness.ExcludedRanges is null ? 0 :
-                                    2 + baseCompleteness.ExcludedRanges.Length))]
+                    ? TruncatedExclusion(baseCompleteness.ExcludedRanges)
                     : baseCompleteness.ExcludedRanges
             };
 
@@ -188,6 +182,13 @@ public sealed class V3EvidencePacketAssembler
         return new V3PacketAssembly(
             Array.AsReadOnly(packages.ToArray()),
             Array.AsReadOnly(omitted.ToArray()), coverage, totalBytes);
+    }
+
+    private static string TruncatedExclusion(string? prior)
+    {
+        var detail = "Some authorized evidence omitted by V3 packet limits" +
+            (prior is null ? "" : "; " + prior);
+        return detail.Length <= 1_024 ? detail : detail[..1_024];
     }
 
     private static bool IsFirstPerson(string text) =>
