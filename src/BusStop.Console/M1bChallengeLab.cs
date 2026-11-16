@@ -190,7 +190,7 @@ public static class M1bChallengeLab
                     {
                         response = model.Decide(new ModelRequest(
                             speaker.Id, prompt,
-                            JsonSchema: ShadowResponseParser.JsonSchemaFor(candidate.CandidateId),
+                            JsonSchema: ShadowResponseParser.JsonSchemaFor(candidate.CandidateId, refs),
                             MaxGeneratedTokens: 768, ContextTokens: 8192));
                         if (response.Transport != ModelTransport.Responded ||
                             string.IsNullOrWhiteSpace(response.RawJson))

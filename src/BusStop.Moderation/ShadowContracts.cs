@@ -71,7 +71,20 @@ public static class ShadowResponseParser
 
     /// <summary>Pin the candidate identity in Ollama constrained decoding.
     /// Only the host validator determines whether generated evidence is authorized.</summary>
-    public static string JsonSchemaFor(Guid candidateId) => $$"""
+    public static string JsonSchemaFor(Guid candidateId,
+        IReadOnlyCollection<string>? allowedEvidenceReferences = null)
+    {
+        // Ollama constrained decoding helps the model pick an authorized
+        // reference. Host-side scope validation remains mandatory, even when
+        // the supplied schema was followed. Null retains legacy shape tests.
+        var referenceConstraint = allowedEvidenceReferences is null ? string.Empty
+            : ", \"enum\": " + JsonSerializer.Serialize(allowedEvidenceReferences
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(r => r, StringComparer.Ordinal)
+                .ToArray());
+
+        return $"""
         {
           "type": "object",
           "additionalProperties": false,
@@ -93,7 +106,7 @@ public static class ShadowResponseParser
                       "UnsupportedFactualClaim", "ContradictedFactualClaim", "ExactDuplicate", "SemanticRepetition", "Other"] },
                     "claimSpan": { "type": "string", "minLength": 1 },
                     "explanation": { "type": "string", "minLength": 1, "maxLength": 240 },
-                    "evidenceReferences": { "type": "array", "items": { "type": "string" }, "maxItems": 4 },
+                    "evidenceReferences": { "type": "array", "items": { "type": "string"{{referenceConstraint}} }, "maxItems": 4 },
                     "uncertain": { "type": "boolean" },
                     "narrowFeedback": { "type": ["string", "null"], "maxLength": 120 }
                   }
@@ -103,6 +116,7 @@ public static class ShadowResponseParser
           }
         }
         """;
+    }
 
 
     public static ShadowParsedJudgment Parse(
