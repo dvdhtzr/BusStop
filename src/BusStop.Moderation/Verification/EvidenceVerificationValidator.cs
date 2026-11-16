@@ -43,8 +43,7 @@ public static class EvidenceVerificationValidator
                 temperature is >= 0 and <= 2 &&
                 policy.Think.HasValue &&
                 policy.MaxSessionAttempts > 0 &&
-                policy.MaxUtteranceAttempts is > 0 and <= EvidenceVerifierV1.MaxAttemptsPerUtterance &&
-                policy.MaxSessionAttempts >= policy.MaxUtteranceAttempts,
+                policy.MaxUtteranceAttempts is > 0 and <= EvidenceVerifierV1.MaxAttemptsPerUtterance,
             "Shadow verifier needs pinned settings and bounded budgets.");
     }
 
@@ -58,7 +57,8 @@ public static class EvidenceVerificationValidator
                 job.UtteranceId == committed.Id &&
                 job.SpeakerId == committed.Speaker &&
                 job.CommittedBoundary >= 0 &&
-                job.CommittedBoundary < committed.Sequence,
+                committed.Sequence > 0 &&
+                job.CommittedBoundary == committed.Sequence - 1,
             "Verifier job does not match committed speech and boundary.");
         Require(IsSha256(job.UtteranceSha256) &&
                 job.UtteranceSha256 == Sha256Hex(committed.Text),
@@ -74,7 +74,8 @@ public static class EvidenceVerificationValidator
             "Invalid claim identity.");
         Require(Enum.IsDefined(typeof(ClaimCategory), claim.Category) &&
                 Enum.IsDefined(typeof(ClaimRhetoricalMode), claim.RhetoricalMode) &&
-                Enum.IsDefined(typeof(ClaimExtractionProvenance), claim.ExtractionProvenance),
+                Enum.IsDefined(typeof(ClaimExtractionProvenance), claim.ExtractionProvenance) &&
+                Enum.IsDefined(typeof(ClaimValidationStatus), claim.ValidationStatus),
             "Unknown claim classification.");
         Require(claim.Start >= 0 && claim.Length > 0 &&
                 claim.Start <= committed.Text.Length &&
@@ -252,6 +253,7 @@ public static class EvidenceVerificationValidator
     }
 
     private static bool Version(string? value, int maxLength = 128) =>
+        value is { Length: > 0 } &&
         !string.IsNullOrWhiteSpace(value) && value.Length <= maxLength;
 
     private static bool IsSha256(string? value) =>
