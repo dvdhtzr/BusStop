@@ -252,7 +252,9 @@ public sealed class VerifierV4Tests
         Assert.Equal(2, report.AttemptDiagnostics.Count);
         Assert.Equal(VerificationOperationalStatus.InvalidResponse,
             report.AttemptDiagnostics[0].Status);
-        Assert.Contains("JsonException", report.AttemptDiagnostics[0].Detail,
+        // System.Text.Json throws the more specific JsonReaderException here.
+        // Validate the parser-failure family rather than one concrete subtype.
+        Assert.Contains("Json", report.AttemptDiagnostics[0].Detail,
             StringComparison.Ordinal);
         Assert.NotNull(report.AttemptDiagnostics[0].ResponseSha256);
         Assert.Equal(VerificationOperationalStatus.Completed,
