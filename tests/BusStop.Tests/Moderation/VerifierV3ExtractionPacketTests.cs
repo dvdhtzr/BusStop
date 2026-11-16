@@ -402,9 +402,7 @@ public sealed class VerifierV3PacketTests
         Speak(db, f.Session, f.Other, "Echo the same line.");
         var repeated = Speak(db, f.Session, f.Speaker, "Echo the same line.");
         var job = Job(repeated);
-        var allowed = db.SelectVerifierEvidence(job, repeated,
-            ClaimCategory.DialogueAttribution);
-        var signal = V3ClaimDetector.CheckExactCopy(job, repeated, allowed.Scope);
+        var signal = V3ClaimDetector.CheckExactCopy(db, job, repeated);
         Assert.NotNull(signal);
         Assert.StartsWith("utterance:", signal.EvidenceReference);
         Assert.Equal(repeated.Text, signal.Text);
