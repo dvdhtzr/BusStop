@@ -147,6 +147,7 @@ public sealed partial class ConversationStore
             .SingleOrDefault(x => x.Id == job.UtteranceId)
             ?? throw new InvalidDataException("Unknown V4 committed utterance.");
         EvidenceVerificationValidator.ValidateJob(job, committed);
+        ValidateV4RecordedOpportunityBoundary(job);
 
         var session = GetSession(job.SessionId)
             ?? throw new InvalidDataException("Missing V4 session.");
@@ -243,6 +244,7 @@ public sealed partial class ConversationStore
             .SingleOrDefault(x => x.Id == job.UtteranceId)
             ?? throw new InvalidDataException("Unknown committed utterance.");
         EvidenceVerificationValidator.ValidateJob(job, committed);
+        ValidateV4RecordedOpportunityBoundary(job);
 
         int shared;
         using (var cmd = _connection.CreateCommand())
@@ -254,6 +256,25 @@ public sealed partial class ConversationStore
         }
         var (extraction, verification) = CountV4Utterance(job.UtteranceId, null);
         return new V4AttemptCounts(shared, extraction, verification);
+    }
+
+    /// <summary>The committed turn must still bind to its original recorded
+    /// speaking opportunity, not merely to a reconstructed sequence number.</summary>
+    private void ValidateV4RecordedOpportunityBoundary(VerificationJobIdentity job)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT committed_boundary FROM speaking_opportunities
+            WHERE id = @opp AND session_id = @session
+              AND intended_participant = @speaker;
+            """;
+        cmd.Parameters.AddWithValue("@opp", job.OpportunityId.ToString());
+        cmd.Parameters.AddWithValue("@session", job.SessionId.ToString());
+        cmd.Parameters.AddWithValue("@speaker", job.SpeakerId.ToString());
+        if (cmd.ExecuteScalar() is not long boundary ||
+            boundary != job.CommittedBoundary)
+            throw new InvalidDataException(
+                "V4 original speaking-opportunity evidence boundary does not match the job.");
     }
 
     private (int Extraction, int Verification) CountV4Utterance(
