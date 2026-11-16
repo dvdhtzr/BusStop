@@ -147,22 +147,22 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
             var priorRef = $"utterance:{copied.Id}";
             var isOtherSpeaker = copied.Speaker != candidate.Speaker;
             var kind = isOtherSpeaker ? "another participant" : "the same participant";
-            var finding = new ModerationFinding(
+            var duplicateFinding = new ModerationFinding(
                 ModerationIssueKind.ExactDuplicate, candidate.Text,
                 $"Verbatim repeat of an earlier committed utterance by {kind}.",
                 new[] { priorRef }, false,
                 "The original is already in the conversation.");
-            var judgment = new ModerationJudgment(
-                candidate.CandidateId, ModerationDisposition.Advisory, finding);
+            var duplicateJudgment = new ModerationJudgment(
+                candidate.CandidateId, ModerationDisposition.Advisory, duplicateFinding);
             var refs = new[] { priorRef };
             ModerationContractValidator.Validate(candidate,
                 new ModerationEvidenceScope(candidate.Session, candidate.Opportunity,
                     candidate.Speaker, candidate.CommittedBoundary,
-                    refs.ToHashSet(StringComparer.Ordinal)), judgment);
+                    refs.ToHashSet(StringComparer.Ordinal)), duplicateJudgment);
             store.AppendShadowReview(new ShadowReviewRecord(
                 candidate, observation.CommittedUtterance, item.Trigger,
                 refs, _model.ModelName, _model.ModelDigest, null,
-                ShadowReviewStatus.Reviewed, judgment,
+                ShadowReviewStatus.Reviewed, duplicateJudgment,
                 isOtherSpeaker ? ModeratorSeverity.Medium : ModeratorSeverity.Low,
                 null, null, DateTimeOffset.UtcNow,
                 Array.Empty<ShadowInferenceTrace>()));
