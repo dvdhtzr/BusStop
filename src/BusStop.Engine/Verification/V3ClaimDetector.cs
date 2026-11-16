@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using BusStop.Domain;
 using BusStop.Moderation.Verification;
+using BusStop.Persistence;
 
 namespace BusStop.Engine.Verification;
 
@@ -120,16 +121,14 @@ public static class V3ClaimDetector
     }
 
     public static V3ExactCopySignal? CheckExactCopy(
-        VerificationJobIdentity job, Utterance committed,
-        VerificationEvidenceScope authorizedDialogue)
+        ConversationStore hostStore, VerificationJobIdentity job, Utterance committed)
     {
-        EvidenceVerificationValidator.ValidateJob(job, committed);
-        if (authorizedDialogue?.AuthorizedItems is null ||
-            authorizedDialogue.SessionId != job.SessionId ||
-            authorizedDialogue.OpportunityId != job.OpportunityId ||
-            authorizedDialogue.SpeakerId != job.SpeakerId ||
-            authorizedDialogue.AsOfBoundary != job.CommittedBoundary)
-            throw new InvalidDataException("Exact-copy scope is not for this committed speaker/boundary.");
+        if (hostStore is null)
+            throw new ArgumentNullException(nameof(hostStore));
+        // Always obtain the scope from the trusted persistence host. Do not
+        // accept arbitrary caller-supplied dictionaries as an authorization.
+        var authorizedDialogue = hostStore.SelectVerifierEvidence(
+            job, committed, ClaimCategory.DialogueAttribution).Scope;
         return authorizedDialogue.AuthorizedItems.Values
             .Where(x => x.Kind == EvidenceItemKind.Utterance &&
                 x.Visibility == EvidenceVisibility.SharedDialogue &&
