@@ -100,7 +100,7 @@ public sealed class M1bChallengeLabTests
         {
             Assert.Equal("Deterministic", r.Status);
             Assert.Empty(r.Attempts);
-            Assert.True(r.Correct);
+            Assert.Equal(true, r.Correct);
         });
     }
 
@@ -150,7 +150,7 @@ public sealed class M1bChallengeLabTests
         var c = Assert.Single(report.Cases);
         Assert.Equal("Reviewed", c.Status);
         Assert.Equal("Allow", c.Predicted);
-        Assert.True(c.Correct);
+        Assert.Equal(true, c.Correct);
         Assert.Equal(2, c.Attempts.Count);
         Assert.Equal(ShadowReviewStatus.InvalidResponse, c.Attempts[0].Status);
         Assert.Equal(ShadowReviewStatus.Reviewed, c.Attempts[1].Status);
@@ -230,6 +230,58 @@ public sealed class M1bChallengeLabTests
         var c = Assert.Single(report.Cases);
         Assert.Single(c.Attempts);
         Assert.Equal(ShadowReviewStatus.InvalidResponse, c.Attempts[0].Status);
+    }
+
+    [Fact]
+    public void Abstain_is_valid_protocol_but_not_a_correct_allow()
+    {
+        var (corpus, raw) = Fixture();
+        var model = new Model((request, _) =>
+            ModelResponse.Responded(JsonSerializer.Serialize(new
+            {
+                contractVersion = "shadow-m1-v1",
+                candidateId = Identity(request),
+                disposition = "Abstain",
+                severity = "None",
+                finding = (object?)null
+            })));
+        var report = M1bChallengeLab.Run(corpus, raw, model,
+            maxCases: 1, modelBudget: 2);
+        Assert.Equal(1, report.Summary.ValidModelResponses);
+        Assert.Equal(1, report.Summary.Abstentions);
+        Assert.Equal(1, report.Summary.Unscorable);
+        Assert.Equal(0, report.Summary.TrueNegative);
+        Assert.Null(Assert.Single(report.Cases).Correct);
+    }
+
+    [Fact]
+    public void Accept_with_a_finding_is_incoherent_and_not_a_false_positive()
+    {
+        var (corpus, raw) = Fixture();
+        var model = new Model((request, _) =>
+            ModelResponse.Responded(JsonSerializer.Serialize(new
+            {
+                contractVersion = "shadow-m1-v1",
+                candidateId = Identity(request),
+                disposition = "Accept",
+                severity = "Low",
+                finding = new
+                {
+                    kind = "Other",
+                    claimSpan = "Shiny pipes don't fix rusted foundations.",
+                    explanation = "Incoherent acceptance containing a finding.",
+                    evidenceReferences = Array.Empty<string>(),
+                    uncertain = true,
+                    narrowFeedback = (string?)null
+                }
+            })));
+        var report = M1bChallengeLab.Run(corpus, raw, model,
+            maxCases: 1, modelBudget: 2);
+        Assert.Equal(1, report.Summary.ValidModelResponses);
+        Assert.Equal(1, report.Summary.InconsistentJudgments);
+        Assert.Equal(1, report.Summary.Unscorable);
+        Assert.Equal(0, report.Summary.FalsePositive);
+        Assert.Null(Assert.Single(report.Cases).Correct);
     }
 
     [Fact]

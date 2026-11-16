@@ -130,6 +130,8 @@ if (argv.Contains("--m1b-challenge-check") || argv.Contains("--m1b-challenge-run
             "; false negatives: " + s.FalseNegative +
             "; true negatives: " + s.TrueNegative +
             "; unscorable: " + s.Unscorable);
+        System.Console.WriteLine("Abstentions: " + s.Abstentions +
+            "; incoherent verdicts: " + s.InconsistentJudgments);
         System.Console.WriteLine("Deterministic exact copies: " +
             s.DeterministicCases + "; Ollama calls: " + s.ModelCalls);
         System.Console.WriteLine("Private case-by-case report: " + reportPath);

@@ -39,6 +39,7 @@ public static class M1bChallengeLab
         int DeterministicCases, int ModelCases, int ModelCalls,
         int ValidModelResponses, int InvalidModelResponses,
         int TransportFailures, int BudgetExhausted,
+        int Abstentions, int InconsistentJudgments,
         double? Precision, double? RecallLowerBound, double? FalsePositiveRate);
 
     public sealed record Report(
@@ -300,6 +301,8 @@ public static class M1bChallengeLab
             output.Count(r => r.Status == "InvalidResponse"),
             output.Count(r => r.Status == "TransportFailure"),
             output.Count(r => r.Status == "BudgetExhausted"),
+            output.Count(r => r.Status == "Abstained"),
+            output.Count(r => r.Status == "InconsistentJudgment"),
             tp + fp == 0 ? null : (double)tp / (tp + fp),
             totalPos == 0 ? null : (double)tp / totalPos,
             totalNeg == 0 ? null : (double)fp / totalNeg);
