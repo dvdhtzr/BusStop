@@ -249,6 +249,14 @@ public sealed class VerifierV4Tests
         Assert.Equal(1, report.Summary.NoMaterialIssues);
         Assert.Equal(2, db.GetModeratorReservations(job.SessionId).Count);
         Assert.Equal(2, db.GetV4AttemptCounts(job).UtteranceVerificationAttempts);
+        Assert.Equal(2, report.AttemptDiagnostics.Count);
+        Assert.Equal(VerificationOperationalStatus.InvalidResponse,
+            report.AttemptDiagnostics[0].Status);
+        Assert.Contains("JsonException", report.AttemptDiagnostics[0].Detail,
+            StringComparison.Ordinal);
+        Assert.NotNull(report.AttemptDiagnostics[0].ResponseSha256);
+        Assert.Equal(VerificationOperationalStatus.Completed,
+            report.AttemptDiagnostics[1].Status);
 
         Assert.False(db.TryReserveV4Attempt(job, Guid.NewGuid(),
             V4AttemptPhase.ClaimVerification));
@@ -273,6 +281,14 @@ public sealed class VerifierV4Tests
         Assert.Equal(1, report.Summary.FailedClaims);
         Assert.Equal(VerificationOperationalStatus.TransportFailure,
             report.ClaimResults[0].Status);
+        Assert.Equal(2, report.AttemptDiagnostics.Count);
+        Assert.All(report.AttemptDiagnostics, attempt =>
+        {
+            Assert.Equal(VerificationOperationalStatus.TransportFailure,
+                attempt.Status);
+            Assert.Contains("Timeout", attempt.Detail, StringComparison.Ordinal);
+            Assert.Null(attempt.ResponseSha256);
+        });
         Assert.Equal(VerificationCompletionStatus.Incomplete,
             report.Summary.CompletionStatus);
         Assert.Equal(2, db.GetModeratorReservations(job.SessionId).Count);
@@ -299,6 +315,9 @@ public sealed class VerifierV4Tests
         Assert.Equal(1, report.Summary.FailedClaims);
         Assert.Equal(VerificationOperationalStatus.InvalidResponse,
             report.ClaimResults[0].Status);
+        Assert.All(report.AttemptDiagnostics, attempt =>
+            Assert.Contains("unauthorized", attempt.Detail,
+                StringComparison.OrdinalIgnoreCase));
         Assert.False(report.HasMaterialContradiction);
     }
 
