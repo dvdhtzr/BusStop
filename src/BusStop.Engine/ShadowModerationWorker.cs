@@ -320,9 +320,9 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
         var c = observation.Candidate;
         var refs = new List<string>();
         var bio = $"bio:{speaker.Id}:v{speaker.Version}";
-        var briefing = $"briefing:{briefing.Id}";
+        var briefingReference = $"briefing:{briefing.Id}";
         refs.Add(bio);
-        refs.Add(briefing);
+        refs.Add(briefingReference);
         refs.AddRange(visiblePassageIds);
         var lines = new StringBuilder();
         foreach (var utterance in observation.PriorCommittedHistory.TakeLast(10))
@@ -355,7 +355,7 @@ public sealed class ShadowModerationWorker : IShadowModerationSink
         sb.AppendLine($"Candidate ID: {c.CandidateId:D}");
         sb.AppendLine($"Speaker: {speaker.Name}");
         sb.AppendLine($"[{bio}] {speaker.Persona}; traits: {string.Join(", ", speaker.Traits)}");
-        sb.AppendLine($"[{briefing}] {briefing.Title} — {briefing.Source}");
+        sb.AppendLine($"[{briefingReference}] {briefing.Title} — {briefing.Source}");
         sb.AppendLine(briefing.Body);
         if (visiblePassageIds.Count > 0)
             sb.AppendLine($"Authorized source passage references: {string.Join(", ", visiblePassageIds)}");
