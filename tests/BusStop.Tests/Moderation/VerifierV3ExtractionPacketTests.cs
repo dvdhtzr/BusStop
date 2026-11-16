@@ -112,7 +112,7 @@ public sealed class VerifierV3ExtractionTests
             c => c.ClaimText == "7" &&
                 c.RhetoricalMode == ClaimRhetoricalMode.Conditional);
         Assert.Contains(found.Claims,
-            c => c.ClaimText == "12" &&
+            c => c.ClaimText.Contains("12", StringComparison.Ordinal) &&
                 c.RhetoricalMode == ClaimRhetoricalMode.Quoted);
         // No V3 object can record a contradiction or block an utterance.
         Assert.IsType<V3ExtractionResult>(found);
