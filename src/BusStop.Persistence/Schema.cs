@@ -243,5 +243,49 @@ internal static class Schema
             BEGIN SELECT RAISE(ABORT, 'Immutable character history event'); END;
         CREATE TRIGGER IF NOT EXISTS v2_history_no_delete BEFORE DELETE ON character_history_events
             BEGIN SELECT RAISE(ABORT, 'Immutable character history event'); END;
+        -- V4 is private and explicitly session-pinned, never default-enabled.
+        -- M1 retains its original schema, values and independent audit rows.
+        CREATE TABLE IF NOT EXISTS session_v4_verifier_policies (
+            session_id             TEXT PRIMARY KEY REFERENCES sessions(id),
+            contract_version       TEXT NOT NULL,
+            mode                   TEXT NOT NULL CHECK(mode = 'Shadow'),
+            rule_version           TEXT NOT NULL,
+            extraction_prompt      TEXT NOT NULL,
+            verification_prompt    TEXT NOT NULL,
+            retrieval_selector     TEXT NOT NULL,
+            verification_schema    TEXT NOT NULL,
+            model_name             TEXT NOT NULL,
+            model_digest           TEXT NOT NULL,
+            temperature            REAL NOT NULL,
+            think                  INTEGER NOT NULL CHECK(think IN (0, 1)),
+            max_session_calls      INTEGER NOT NULL,
+            max_utterance_calls    INTEGER NOT NULL,
+            max_verification_calls INTEGER NOT NULL,
+            generated_tokens       INTEGER NOT NULL,
+            context_tokens         INTEGER NOT NULL
+        );
+
+        -- Phase is append-only and references the SAME shared charged request
+        -- in moderator_inference_reservations. This is not a parallel budget.
+        CREATE TABLE IF NOT EXISTS v4_verifier_attempt_phases (
+            request_id    TEXT PRIMARY KEY REFERENCES moderator_inference_reservations(request_id),
+            job_id        TEXT NOT NULL,
+            session_id    TEXT NOT NULL REFERENCES sessions(id),
+            utterance_id  TEXT NOT NULL REFERENCES utterances(id),
+            phase         TEXT NOT NULL CHECK(phase IN ('ClaimExtraction', 'ClaimVerification')),
+            policy_version TEXT NOT NULL,
+            reserved_at    TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ix_v4_verifier_attempt_utterance
+            ON v4_verifier_attempt_phases(utterance_id, phase);
+
+        CREATE TRIGGER IF NOT EXISTS v4_policy_no_update BEFORE UPDATE ON session_v4_verifier_policies
+            BEGIN SELECT RAISE(ABORT, 'Immutable V4 session policy'); END;
+        CREATE TRIGGER IF NOT EXISTS v4_policy_no_delete BEFORE DELETE ON session_v4_verifier_policies
+            BEGIN SELECT RAISE(ABORT, 'Immutable V4 session policy'); END;
+        CREATE TRIGGER IF NOT EXISTS v4_phases_no_update BEFORE UPDATE ON v4_verifier_attempt_phases
+            BEGIN SELECT RAISE(ABORT, 'Immutable V4 inference phase'); END;
+        CREATE TRIGGER IF NOT EXISTS v4_phases_no_delete BEFORE DELETE ON v4_verifier_attempt_phases
+            BEGIN SELECT RAISE(ABORT, 'Immutable V4 inference phase'); END;
         """;
 }
