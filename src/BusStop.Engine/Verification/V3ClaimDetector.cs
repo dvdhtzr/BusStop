@@ -39,7 +39,7 @@ public static class V3ClaimDetector
     public const int MaxCandidates = 24;
 
     private static readonly Regex NumbersAndDates = new(
-        @"(?<![\w])(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(?:%|percent|million|billion|thousand|miles?|kilometers?|km|hours?|minutes?|days?|weeks?|years?|dollars?|people|outages?|flights?))?\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,\s*\d{4})?\b",
+        @"(?<!\w)(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:%|percent|million|billion|thousand|miles?|kilometers?|km|hours?|minutes?|days?|weeks?|years?|dollars?|people|outages?|flights?|planes?))?(?!\w)|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,\s*\d{4})?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex PersonalOpening = new(
