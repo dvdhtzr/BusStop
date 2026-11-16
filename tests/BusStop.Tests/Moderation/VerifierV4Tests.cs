@@ -149,14 +149,10 @@ public sealed class VerifierV4Tests
         using var db = new ConversationStore("Data Source=:memory:");
         db.InitializeSchema();
         Assert.Null(db.GetV4VerifierPolicy(SessionId.New()));
-        Assert.Throws<InvalidDataException>(() => Policy() with
-        {
-            Mode = VerificationOperatingMode.Disabled
-        }.Validate());
-        Assert.Throws<InvalidDataException>(() => Policy() with
-        {
-            MaxCallsPerUtterance = 4
-        }.Validate());
+        Assert.Throws<InvalidDataException>(() =>
+            (Policy() with { Mode = VerificationOperatingMode.Disabled }).Validate());
+        Assert.Throws<InvalidDataException>(() =>
+            (Policy() with { MaxCallsPerUtterance = 4 }).Validate());
 
         using var f = Setup().Store;
         var policy = f.GetV4VerifierPolicy(SessionId.New());
