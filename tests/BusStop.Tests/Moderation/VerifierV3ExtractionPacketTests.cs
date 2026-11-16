@@ -404,7 +404,7 @@ public sealed class VerifierV3PacketTests
         var job = Job(repeated);
         var allowed = db.SelectVerifierEvidence(job, repeated,
             ClaimCategory.DialogueAttribution);
-        var signal = V3ClaimDetector.CheckExactCopy(repeated.Text, allowed.Scope);
+        var signal = V3ClaimDetector.CheckExactCopy(job, repeated, allowed.Scope);
         Assert.NotNull(signal);
         Assert.StartsWith("utterance:", signal.EvidenceReference);
         Assert.Equal(repeated.Text, signal.Text);
