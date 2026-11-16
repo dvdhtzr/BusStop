@@ -111,10 +111,12 @@ public sealed class VerifierV2HistoryRetrievalTests
         var session = SeedSession(db, new[] { a, b }, Brief(), DateTimeOffset.UtcNow);
         db.PinVerifierCharacterVersion(session.Id, a.Id, 1);
         db.PinVerifierCharacterVersion(session.Id, a.Id, 1);
+        // Once an unsealed legacy profile version is pinned, no later anchor set
+        // can retroactively add binding facts. It remains an empty set.
+        db.PinVerifierCharacterVersion(session.Id, b.Id, 1);
         Assert.Throws<InvalidOperationException>(() =>
-            db.SealVerifierAnchorSet(b.Id, 1, Array.Empty<CharacterAnchor>(), "owner-review:2")
-            // This version is not pinned yet: it is legal to seal an empty set.
-        );
+            db.SealVerifierAnchorSet(b.Id, 1,
+                Array.Empty<CharacterAnchor>(), "owner-review:2"));
     }
 
     [Fact]
