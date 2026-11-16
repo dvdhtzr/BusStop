@@ -156,16 +156,24 @@ public static class V3ClaimDetector
     internal static ClaimRhetoricalMode ClassifyMode(string text, int start, int length)
     {
         var segment = text.Substring(start, length);
-        if (Quotes.IsMatch(segment) && segment.Length <= 202 &&
-            (segment[0] == '"' || segment[0] == '“'))
-            return ClaimRhetoricalMode.Quoted;
-        // Respect question punctuation at the end of the clause; questions are
-        // still candidates, never automatic material contradictions.
-        var beforeEnd = Math.Min(text.Length, start + length);
-        if (segment.Contains('?') || (beforeEnd < text.Length && text[beforeEnd] == '?'))
+        int left = start;
+        while (left > 0 && text[left - 1] is not ('.' or '!' or '?' or ';' or '\n'))
+            left--;
+        int right = start + length;
+        while (right < text.Length && text[right] is not ('.' or '!' or '?' or ';' or '\n'))
+            right++;
+        var sentence = text.Substring(left, right - left);
+
+        // A number inside quotation marks is not a speaker-asserted fact.
+        foreach (Match q in Quotes.Matches(sentence))
+            if (left + q.Index <= start &&
+                left + q.Index + q.Length >= start + length)
+                return ClaimRhetoricalMode.Quoted;
+
+        if (segment.Contains('?') || (right < text.Length && text[right] == '?'))
             return ClaimRhetoricalMode.Question;
-        if (Humor.IsMatch(segment)) return ClaimRhetoricalMode.Humorous;
-        if (Conditional.IsMatch(segment)) return ClaimRhetoricalMode.Conditional;
+        if (Humor.IsMatch(sentence)) return ClaimRhetoricalMode.Humorous;
+        if (Conditional.IsMatch(sentence)) return ClaimRhetoricalMode.Conditional;
         return ClaimRhetoricalMode.Asserted;
     }
 
