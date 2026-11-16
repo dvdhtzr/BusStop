@@ -84,8 +84,8 @@ public sealed class V3EvidencePacketAssembler
             // about the speaker. Host subject resolution is intentionally
             // conservative until an explicit subject-mapping index exists.
             var retrievalCategory = claim.Category;
-            if (claim.Category is ClaimCategory.PersonalHistory or
-                ClaimCategory.CharacterIdentity &&
+            if ((claim.Category is ClaimCategory.PersonalHistory or
+                ClaimCategory.CharacterIdentity) &&
                 !IsFirstPerson(claim.ClaimText))
                 retrievalCategory = ClaimCategory.Other;
 
@@ -130,10 +130,13 @@ public sealed class V3EvidencePacketAssembler
                         ? EvidenceCompletenessStatus.Partial
                         : EvidenceCompletenessStatus.CompleteForDeclaredScope,
                 ExcludedRanges = cut
-                    ? (baseCompleteness.ExcludedRanges is null
-                        ? "Some authorized evidence omitted by V3 packet limits"
-                        : baseCompleteness.ExcludedRanges +
-                          "; additional evidence omitted by V3 packet limits")
+                    ? ("Some authorized evidence omitted by V3 packet limits" +
+                        (baseCompleteness.ExcludedRanges is null ? "" :
+                            "; " + baseCompleteness.ExcludedRanges))[..Math.Min(
+                                1_024,
+                                "Some authorized evidence omitted by V3 packet limits".Length +
+                                (baseCompleteness.ExcludedRanges is null ? 0 :
+                                    2 + baseCompleteness.ExcludedRanges.Length))]
                     : baseCompleteness.ExcludedRanges
             };
 
@@ -189,7 +192,7 @@ public sealed class V3EvidencePacketAssembler
 
     private static bool IsFirstPerson(string text) =>
         Regex.IsMatch(text,
-            @"\b(?:I|I've|I'm|my|mine|we|our)\b",
+            @"^\s*(?:I|I've|I'm|my|mine|we|our)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void ValidateLimits(V3PacketLimits limits)
