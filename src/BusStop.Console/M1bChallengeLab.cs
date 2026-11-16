@@ -207,8 +207,25 @@ public static class M1bChallengeLab
                                     response.RawJson, candidate, scope);
                                 attemptStatus = ShadowReviewStatus.Reviewed;
                                 status = "Reviewed";
-                                prediction = parsed.Judgment.Finding is null
-                                    ? "Allow" : "Finding";
+                                var disposition = parsed.Judgment.Disposition;
+                                var hasFinding = parsed.Judgment.Finding is not null;
+                                // Accepted shape is not the same as a coherent verdict.
+                                // Abstain must NOT inflate true negatives; Accept plus
+                                // a finding must NOT earn true-positive credit.
+                                if (disposition == ModerationDisposition.Accept && !hasFinding)
+                                    prediction = "Allow";
+                                else if ((disposition == ModerationDisposition.Advisory ||
+                                          disposition == ModerationDisposition.RequestRevision) &&
+                                         hasFinding)
+                                    prediction = "Finding";
+                                else if (disposition == ModerationDisposition.Abstain &&
+                                         !hasFinding)
+                                    status = "Abstained";
+                                else
+                                {
+                                    status = "InconsistentJudgment";
+                                    attemptError = "Disposition/finding disagreement.";
+                                }
                             }
                             catch (JsonException ex)
                             {
@@ -278,7 +295,8 @@ public static class M1bChallengeLab
             output.Count(r => r.Status == "Deterministic"),
             output.Count(r => r.Status != "Deterministic"),
             calls,
-            output.Count(r => r.Status == "Reviewed"),
+            output.Count(r => r.Attempts.LastOrDefault()?.Status ==
+                ShadowReviewStatus.Reviewed),
             output.Count(r => r.Status == "InvalidResponse"),
             output.Count(r => r.Status == "TransportFailure"),
             output.Count(r => r.Status == "BudgetExhausted"),
