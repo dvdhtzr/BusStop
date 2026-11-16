@@ -46,3 +46,38 @@ An always-Accept model fails all 14 nonexact positive cases. Host validity prove
 ## Promotion boundaries
 
 Owner reviews the 36 provisional labels, local Release verification is GREEN, a complete 36-case local Ollama run has zero unscorable outputs, and non-null findings must be useful and reference only authorized evidence. Repeated evaluations are required before discussing promotion. No automated merges or enforcement. Stagnation nudges belong to another gate; four near repetitions are allowed in the M1b corpus.
+
+## Bounded corrective experiment: evidence scope + concrete facts
+
+The first live 8-case M1b run on the unmodified versioned corpus yielded:
+four allowed true negatives, two host-detected exact-copy true positives,
+one invalid generated finding and one missed contradiction. In the invalid
+case, the model recognized the synthetic aircraft-crash contradiction but
+cited only a bare GUID instead of the authorized full `briefing:` reference.
+It also accepted a false numeric count (140 vs. 18 departures).
+
+The bounded correction changes **only** the shadow model guidance and
+per-request schema constraints, **not** host authority, character prompts,
+conversation logic or expected labels:
+
+- The host constructs `finding.evidenceReferences.items.enum` from the
+  currently authorized evidence references. The model should produce the
+  complete prefixed string, not an invented ID or a bare GUID.
+- The moderator explicitly compares declarative event facts (including
+  counts, duration, crashes, injuries, causes and actions) to the briefing,
+  while continuing to allow analogies, questions, speculation, subjective
+  positions and self-authored plausible fictional anecdotes.
+- The existing strict parser + host evidence-scope validator remains
+  authoritative; generating an in-scope reference is not semantic proof.
+- New sessions pin `shadow-rules-m1b-v1` and `shadow-prompt-m1b-v1`;
+  previous M1a sessions must not silently resume under the new policy.
+
+**Keep the corpus frozen.** The comparable eight-case baseline report uses
+corpus SHA-256
+`2c5bedecc0628486103a4fc3eb2b507282a93941d448c6abf0f65346c401cdf4`.
+The re-run should report the same corpus hash, but different pinned versions.
+
+Verify Release GREEN first using `.\scripts\evaluate-m1b-challenges.ps1`.
+Then repeat `.\scripts\evaluate-m1b-challenges.ps1 -Live -Limit 8`
+and review the raw per-case evidence citations and missed-violation outcomes.
+Do **not** run all 36 or merge until this corrected smoke is inspected.
