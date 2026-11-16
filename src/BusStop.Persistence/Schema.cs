@@ -173,5 +173,75 @@ internal static class Schema
             briefing_id    TEXT NOT NULL REFERENCES briefings(id),
             passage_ids    TEXT NOT NULL
         );
+
+        -- V2 private verifier-only sidecar. No existing transcript or M1 table is changed.
+        -- An absent anchor set is deliberately interpreted as ZERO binding anchors.
+        CREATE TABLE IF NOT EXISTS character_anchor_sets (
+            character_id       TEXT NOT NULL,
+            profile_version    INTEGER NOT NULL,
+            owner_review_ref   TEXT NOT NULL,
+            sealed_at          TEXT NOT NULL,
+            PRIMARY KEY (character_id, profile_version),
+            FOREIGN KEY (character_id, profile_version)
+                REFERENCES characters(id, version)
+        );
+
+        CREATE TABLE IF NOT EXISTS character_anchors (
+            character_id       TEXT NOT NULL,
+            profile_version    INTEGER NOT NULL,
+            anchor_key         TEXT NOT NULL,
+            anchor_value       TEXT NOT NULL,
+            exposure           TEXT NOT NULL CHECK (exposure IN ('SubjectOnly', 'SharedWithRoom')),
+            PRIMARY KEY (character_id, profile_version, anchor_key),
+            FOREIGN KEY (character_id, profile_version)
+                REFERENCES character_anchor_sets(character_id, profile_version)
+        );
+
+        -- These pins are explicit and only admitted before the first opportunity.
+        -- Legacy sessions with no pins never inherit a new profile's anchors.
+        CREATE TABLE IF NOT EXISTS session_verifier_profile_pins (
+            session_id          TEXT NOT NULL REFERENCES sessions(id),
+            character_id        TEXT NOT NULL,
+            profile_version     INTEGER NOT NULL,
+            pinned_at           TEXT NOT NULL,
+            PRIMARY KEY (session_id, character_id),
+            FOREIGN KEY (character_id, profile_version)
+                REFERENCES characters(id, version)
+        );
+
+        CREATE TABLE IF NOT EXISTS character_history_events (
+            event_id            TEXT PRIMARY KEY,
+            subject_id          TEXT NOT NULL,
+            history_key         TEXT NOT NULL,
+            statement           TEXT NOT NULL,
+            source_session_id   TEXT NOT NULL REFERENCES sessions(id),
+            source_utterance_id TEXT NOT NULL REFERENCES utterances(id),
+            source_sequence     INTEGER NOT NULL,
+            event_kind          TEXT NOT NULL
+                CHECK (event_kind IN ('Provisional', 'ReviewedSelfReaffirmation', 'ReviewedSelfCorrection')),
+            previous_event_id   TEXT NULL UNIQUE REFERENCES character_history_events(event_id),
+            owner_review_ref    TEXT NULL,
+            recorded_at         TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ix_character_history_subject
+            ON character_history_events(subject_id, history_key, recorded_at);
+
+        -- Enforce append-only authority even if a future writer is careless.
+        CREATE TRIGGER IF NOT EXISTS v2_anchor_sets_no_update BEFORE UPDATE ON character_anchor_sets
+            BEGIN SELECT RAISE(ABORT, 'Immutable character anchor set'); END;
+        CREATE TRIGGER IF NOT EXISTS v2_anchor_sets_no_delete BEFORE DELETE ON character_anchor_sets
+            BEGIN SELECT RAISE(ABORT, 'Immutable character anchor set'); END;
+        CREATE TRIGGER IF NOT EXISTS v2_anchors_no_update BEFORE UPDATE ON character_anchors
+            BEGIN SELECT RAISE(ABORT, 'Immutable character anchor'); END;
+        CREATE TRIGGER IF NOT EXISTS v2_anchors_no_delete BEFORE DELETE ON character_anchors
+            BEGIN SELECT RAISE(ABORT, 'Immutable character anchor'); END;
+        CREATE TRIGGER IF NOT EXISTS v2_profile_pins_no_update BEFORE UPDATE ON session_verifier_profile_pins
+            BEGIN SELECT RAISE(ABORT, 'Immutable verifier profile pin'); END;
+        CREATE TRIGGER IF NOT EXISTS v2_profile_pins_no_delete BEFORE DELETE ON session_verifier_profile_pins
+            BEGIN SELECT RAISE(ABORT, 'Immutable verifier profile pin'); END;
+        CREATE TRIGGER IF NOT EXISTS v2_history_no_update BEFORE UPDATE ON character_history_events
+            BEGIN SELECT RAISE(ABORT, 'Immutable character history event'); END;
+        CREATE TRIGGER IF NOT EXISTS v2_history_no_delete BEFORE DELETE ON character_history_events
+            BEGIN SELECT RAISE(ABORT, 'Immutable character history event'); END;
         """;
 }
