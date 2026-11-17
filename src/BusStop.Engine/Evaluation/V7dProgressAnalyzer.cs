@@ -16,6 +16,9 @@ public static class V7dProgressContract
     public const int MaxTurns = 2000;
     public const int RecentLookback = 6;
     public const double LexicalOverlapThreshold = 0.72;
+    // Exploratory recall-oriented bucket, NOT confirmed semantic repetition.
+    // This is deliberately separate from the stricter lexical-overlap cue.
+    public const double BroadLexicalEchoThreshold = 0.25;
     public const int MinimumTokensForOverlap = 8;
     public const int LoopWindow = 6;
     public const int LoopCandidateMinimumSignals = 3;
@@ -37,6 +40,8 @@ public sealed record V7dPrivateSignal(
     long? ExactReferenceSequence,
     bool LexicalOverlapCandidate,
     long? LexicalReferenceSequence,
+    bool BroadLexicalEchoCandidate,
+    long? BroadLexicalReferenceSequence,
     double MaximumRecentTokenSimilarity,
     bool LoopWindowCandidate);
 
@@ -55,6 +60,7 @@ public sealed record V7dSafeProgressReport(
     int DistinctSpeakers,
     int ExactCopyCandidates,
     int LexicalOverlapCandidates,
+    int BroadLexicalEchoCandidates,
     int TurnsInsideCandidateLoopWindows,
     bool MatchesKnownDevelopmentTranscript,
     bool HumanReviewCompleted,
@@ -130,8 +136,13 @@ public static class V7dProgressAnalyzer
             // six turns. Avoid duplicating the exact cue as lexical overlap.
             var lexical = !exact &&
                 maximum >= V7dProgressContract.LexicalOverlapThreshold;
+            // Broad lexical echo is for human triage. At this threshold,
+            // ordinary shared vocabulary can be flagged: false positives
+            // are expected and must be quantified in development review.
+            var broad = !exact && !lexical &&
+                maximum >= V7dProgressContract.BroadLexicalEchoThreshold;
 
-            overlapSignal.Add(exact || lexical);
+            overlapSignal.Add(exact || lexical || broad);
             var window = overlapSignal
                 .TakeLast(V7dProgressContract.LoopWindow).Count(x => x);
             // A loop candidate is a coarse local pressure indicator, never
@@ -143,6 +154,7 @@ public static class V7dProgressAnalyzer
                 turn.Sequence, TextHash(turn.Text), exact,
                 exact ? exactAt : null, lexical,
                 lexical ? closest : null,
+                broad, broad ? closest : null,
                 Math.Round(maximum, 4), loop));
             all.Add((turn, normalized, set));
         }
@@ -171,6 +183,7 @@ public static class V7dProgressAnalyzer
             turns.Count, turns.Select(x => x.SpeakerId).Distinct().Count(),
             analysis.Signals.Count(x => x.ExactPriorUtterance),
             analysis.Signals.Count(x => x.LexicalOverlapCandidate),
+            analysis.Signals.Count(x => x.BroadLexicalEchoCandidate),
             analysis.Signals.Count(x => x.LoopWindowCandidate),
             analysis.TranscriptSha256 ==
                 V7dProgressContract.InitialDevelopmentTranscriptSha256,
@@ -178,8 +191,9 @@ public static class V7dProgressAnalyzer
             SemanticAccuracyAccepted: false,
             BehavioralInterventionAuthorized: false,
             "Exact/lexical/loop signals are REVIEW CANDIDATES. " +
-            "Lexical overlap is not semantic stagnation; quoted, emotional " +
-            "and deliberate repeated speech may be healthy. " +
+            "Broad lexical echo (Jaccard >=0.25) is an exploratory, " +
+            "false-positive-prone human triage cue, NOT semantic stagnation. " +
+            "Quotes, legitimate callbacks and disagreement may be healthy. " +
             "The known 35-turn transcript is DEVELOPMENT, never a holdout.");
     }
 
