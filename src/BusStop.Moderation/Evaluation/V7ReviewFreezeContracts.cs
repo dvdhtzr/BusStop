@@ -109,6 +109,15 @@ public sealed record V7OwnerFreezeApproval(
     string CriteriaSha256,
     string Declaration);
 
+/// <summary>Unsigned, pre-approval commitments only; no review acceptance.</summary>
+public sealed record V7FreezePreparation(
+    string ReviewVersion, string CriteriaVersion,
+    string DevelopmentSha256, string HoldoutSha256, string CriteriaSha256,
+    int DevelopmentCases, int HoldoutCases,
+    bool HumanApprovalReceived,
+    bool SemanticAcceptanceGranted,
+    bool EnforcementAuthorized);
+
 public sealed record V7FreezeReceipt(
     string Version,
     string DevelopmentSha256,
@@ -138,9 +147,8 @@ public static class V7ReviewFreezeValidator
     /// This validates self-attested review records but cannot independently
     /// establish that a human actually reviewed them.
     /// </summary>
-    public static V7FreezeReceipt Validate(
-        string developmentJson, string holdoutJson,
-        string criteriaJson, string ownerApprovalJson)
+    public static V7FreezePreparation Prepare(
+        string developmentJson, string holdoutJson, string criteriaJson)
     {
         var development = Read<V7ReviewedCorpus>(developmentJson,
             "version", "labelStatus", "partition", "reviewMethod",
@@ -154,14 +162,10 @@ public static class V7ReviewFreezeValidator
             "minimumIdenticalInputRuns", "minimumNaturalSessions",
             "minimumCrashScenarios", "lanes", "hardGates",
             "humanQualityReviewProcedure", "thresholdRationale");
-        var approval = Read<V7OwnerFreezeApproval>(ownerApprovalJson,
-            "version", "ownerId", "approvedAtUtc", "developmentSha256",
-            "holdoutSha256", "criteriaSha256", "declaration");
 
         ValidateCorpus(development, V7Partition.Development);
         ValidateCorpus(holdout, V7Partition.Holdout);
         ValidateCriteria(criteria);
-        ValidateApproval(approval);
         RequireLaneCoverage(development, criteria, "development");
         RequireLaneCoverage(holdout, criteria, "holdout");
 
@@ -171,9 +175,8 @@ public static class V7ReviewFreezeValidator
             throw new InvalidDataException(
                 "Reviewed development and holdout case IDs overlap.");
 
-        // Cross-partition equality check independent of record IDs or case
-        // order. A true near-duplicate requires owner inspection; code cannot
-        // prove semantic independence of paraphrased scenarios.
+        // Detect exact duplicate scenarios even when IDs were renamed.
+        // A semantically near-identical paraphrase still needs manual review.
         var devFingerprints = development.Cases.Select(CaseFingerprint)
             .ToHashSet(StringComparer.Ordinal);
         if (holdout.Cases.Any(c =>
@@ -181,15 +184,43 @@ public static class V7ReviewFreezeValidator
             throw new InvalidDataException(
                 "Identical claim/evidence examples appear in both partitions.");
 
-        var devSha = Hash(developmentJson);
-        var holdSha = Hash(holdoutJson);
-        var criterionSha = Hash(criteriaJson);
-        if (!SameHash(approval.DevelopmentSha256, devSha) ||
-            !SameHash(approval.HoldoutSha256, holdSha) ||
-            !SameHash(approval.CriteriaSha256, criterionSha))
-            throw new InvalidDataException(
-                "Owner freeze approval does not pin the exact source bytes.");
+        return new V7FreezePreparation(
+            V7FreezeContract.ReviewVersion,
+            V7FreezeContract.ThresholdVersion,
+            Hash(developmentJson), Hash(holdoutJson), Hash(criteriaJson),
+            development.Cases.Count, holdout.Cases.Count,
+            HumanApprovalReceived: false,
+            SemanticAcceptanceGranted: false,
+            EnforcementAuthorized: false);
+    }
 
+    /// <summary>
+    /// A self-attested approval binds exact bytes but is NOT a digital signature
+    /// or proof of independent review or holdout secrecy.
+    /// </summary>
+    public static V7FreezeReceipt Validate(
+        string developmentJson, string holdoutJson,
+        string criteriaJson, string ownerApprovalJson)
+    {
+        var prepared = Prepare(
+            developmentJson, holdoutJson, criteriaJson);
+        var approval = Read<V7OwnerFreezeApproval>(ownerApprovalJson,
+            "version", "ownerId", "approvedAtUtc", "developmentSha256",
+            "holdoutSha256", "criteriaSha256", "declaration");
+        ValidateApproval(approval);
+
+        if (!SameHash(approval.DevelopmentSha256, prepared.DevelopmentSha256) ||
+            !SameHash(approval.HoldoutSha256, prepared.HoldoutSha256) ||
+            !SameHash(approval.CriteriaSha256, prepared.CriteriaSha256))
+            throw new InvalidDataException(
+                "Owner freeze approval does not pin exact source bytes.");
+
+        var development = Read<V7ReviewedCorpus>(developmentJson,
+            "version", "labelStatus", "partition", "reviewMethod",
+            "sourceDeclaration", "cases");
+        var holdout = Read<V7ReviewedCorpus>(holdoutJson,
+            "version", "labelStatus", "partition", "reviewMethod",
+            "sourceDeclaration", "cases");
         if (approval.ApprovedAtUtc <
                 development.Cases.Max(c => c.ReviewedAtUtc) ||
             approval.ApprovedAtUtc <
@@ -197,11 +228,15 @@ public static class V7ReviewFreezeValidator
             throw new InvalidDataException(
                 "Owner approval predates a purported human adjudication.");
 
-        // A receipt contains NO per-case IDs, labels, text or private paths.
         return new V7FreezeReceipt(
-            V7FreezeContract.ApprovalVersion, devSha, holdSha,
-            criterionSha, Hash(ownerApprovalJson), development.Cases.Count,
-            holdout.Cases.Count, "owner-attested-preregistration-validated",
+            V7FreezeContract.ApprovalVersion,
+            prepared.DevelopmentSha256,
+            prepared.HoldoutSha256,
+            prepared.CriteriaSha256,
+            Hash(ownerApprovalJson),
+            prepared.DevelopmentCases,
+            prepared.HoldoutCases,
+            "owner-attested-preregistration-validated",
             SemanticAcceptanceGranted: false,
             EnforcementAuthorized: false,
             "The approval is a human attestation, not cryptographic proof of " +
