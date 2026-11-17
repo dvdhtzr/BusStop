@@ -95,6 +95,16 @@ public sealed record V7AcceptanceCriteria(
     int MinimumIdenticalInputRuns,
     int MinimumNaturalSessions,
     int MinimumCrashScenarios,
+    decimal MinimumClaimSpanPrecision,
+    decimal MinimumClaimSpanRecall,
+    decimal MinimumRhetoricalModeAccuracy,
+    decimal MinimumInsufficientEvidenceRecall,
+    decimal MinimumConflictingEvidenceRecall,
+    decimal MaximumUnscorableRate,
+    decimal MaximumQueueDropRate,
+    decimal MaximumTechnicalFailureRate,
+    int MaximumVerifierP95LatencyMilliseconds,
+    decimal MaximumParticipantLatencyRegressionFraction,
     IReadOnlyList<V7LaneCriterion> Lanes,
     V7IntegrityRequirements HardGates,
     string HumanQualityReviewProcedure,
@@ -160,7 +170,15 @@ public static class V7ReviewFreezeValidator
             "version", "modelName", "modelDigest", "verifierPromptVersion",
             "verificationSchemaVersion", "scorerVersion",
             "minimumIdenticalInputRuns", "minimumNaturalSessions",
-            "minimumCrashScenarios", "lanes", "hardGates",
+            "minimumCrashScenarios", "minimumClaimSpanPrecision",
+            "minimumClaimSpanRecall", "minimumRhetoricalModeAccuracy",
+            "minimumInsufficientEvidenceRecall",
+            "minimumConflictingEvidenceRecall",
+            "maximumUnscorableRate", "maximumQueueDropRate",
+            "maximumTechnicalFailureRate",
+            "maximumVerifierP95LatencyMilliseconds",
+            "maximumParticipantLatencyRegressionFraction",
+            "lanes", "hardGates",
             "humanQualityReviewProcedure", "thresholdRationale");
 
         ValidateCorpus(development, V7Partition.Development);
@@ -331,6 +349,16 @@ public static class V7ReviewFreezeValidator
             plan.MinimumIdenticalInputRuns < 2 ||
             plan.MinimumNaturalSessions < 1 ||
             plan.MinimumCrashScenarios < 1 ||
+            !Fraction(plan.MinimumClaimSpanPrecision) ||
+            !Fraction(plan.MinimumClaimSpanRecall) ||
+            !Fraction(plan.MinimumRhetoricalModeAccuracy) ||
+            !Fraction(plan.MinimumInsufficientEvidenceRecall) ||
+            !Fraction(plan.MinimumConflictingEvidenceRecall) ||
+            !Fraction(plan.MaximumUnscorableRate) ||
+            !Fraction(plan.MaximumQueueDropRate) ||
+            !Fraction(plan.MaximumTechnicalFailureRate) ||
+            plan.MaximumVerifierP95LatencyMilliseconds < 1 ||
+            !Fraction(plan.MaximumParticipantLatencyRegressionFraction) ||
             plan.Lanes is null ||
             !Valid(plan.HumanQualityReviewProcedure, 4000) ||
             !Valid(plan.ThresholdRationale, 4000) ||
