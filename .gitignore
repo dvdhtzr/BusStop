@@ -505,3 +505,7 @@ data/v6b-safe/
 # V7b real human-reviewed evaluations, raw prompts, model answers and local-only aggregates
 **/v7b-private/
 **/v7b-safe/
+
+# V7c private real-session utterances, human reviews, and local aggregate outputs
+**/v7c-private/
+**/v7c-safe/
