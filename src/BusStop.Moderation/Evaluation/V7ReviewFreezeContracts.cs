@@ -1,0 +1,473 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using BusStop.Moderation.Verification;
+
+namespace BusStop.Moderation.Evaluation;
+
+/// <summary>
+/// V7a validates human-attested review inputs and preregistration only.
+/// It cannot grade model output, certify reviewers, expose holdout items, or
+/// authorize participant-facing enforcement.
+/// </summary>
+public static class V7FreezeContract
+{
+    public const string ReviewVersion = "busstop-v7a-review-v1";
+    public const string ThresholdVersion = "busstop-v7a-thresholds-v1";
+    public const string ApprovalVersion = "busstop-v7a-freeze-approval-v1";
+    public const string LabelStatus = "owner-reviewed-attested";
+    public const string ReviewMethod = "independent-human-adjudication";
+    public const int MaxDocumentBytes = 512_000;
+    public const int MaxCases = 512;
+    public const int MaxEvidence = 32;
+    public const string ApprovalDeclaration =
+        "I reviewed the labels and evidence, kept the holdout unseen during model tuning, " +
+        "and approved these criteria before observing holdout model results.";
+}
+
+public enum V7Partition { Development, Holdout }
+
+public sealed record V7ReviewEvidence(
+    string ReferenceId,
+    EvidenceItemKind Kind,
+    EvidenceAuthorityTier AuthorityTier,
+    EvidenceVisibility Visibility,
+    string Excerpt,
+    bool IsSuperseded);
+
+public sealed record V7ReviewedCase(
+    string CaseId,
+    string ScenarioGroup,
+    ClaimCategory Category,
+    ClaimRhetoricalMode RhetoricalMode,
+    string ClaimText,
+    IReadOnlyList<V7ReviewEvidence> Evidence,
+    ClaimVerificationOutcome ReviewedOutcome,
+    IReadOnlyList<string> SupportingReferences,
+    IReadOnlyList<string> OpposingReferences,
+    string ReviewRationale,
+    string ReviewerId,
+    DateTimeOffset ReviewedAtUtc);
+
+public sealed record V7ReviewedCorpus(
+    string Version,
+    string LabelStatus,
+    V7Partition Partition,
+    string ReviewMethod,
+    string SourceDeclaration,
+    IReadOnlyList<V7ReviewedCase> Cases);
+
+/// <summary>
+/// Explicit owner-entered rules. No default numerical targets are chosen by
+/// V7a. A lane with no confirmed-positive examples requires an explanation
+/// and cannot claim precision or recall on such cases.
+/// </summary>
+public sealed record V7LaneCriterion(
+    string Lane,
+    int MinimumIndependentCases,
+    int MinimumCompletedCases,
+    int MinimumConfirmedPositiveCases,
+    decimal MinimumSelectionCoverage,
+    decimal MaximumConfirmedFalsePositiveRate,
+    decimal? MinimumConfirmedPrecision,
+    decimal? MinimumEndToEndConfirmedRecall,
+    decimal MinimumEvidenceSupportRate,
+    string? NotApplicableReason);
+
+public sealed record V7IntegrityRequirements(
+    bool NoUnauthorizedEvidence,
+    bool NoUnchargedModelAttempts,
+    bool NoSpeechOrParticipantContextMutation,
+    bool NoCorruptRecoveryPromotion,
+    bool NoPrivateHoldoutLeakage,
+    bool NoNonlocalVerifierInference,
+    bool NoEnforcement);
+
+public sealed record V7AcceptanceCriteria(
+    string Version,
+    string ModelName,
+    string ModelDigest,
+    string VerifierPromptVersion,
+    string VerificationSchemaVersion,
+    string ScorerVersion,
+    int MinimumIdenticalInputRuns,
+    int MinimumNaturalSessions,
+    int MinimumCrashScenarios,
+    IReadOnlyList<V7LaneCriterion> Lanes,
+    V7IntegrityRequirements HardGates,
+    string HumanQualityReviewProcedure,
+    string ThresholdRationale);
+
+public sealed record V7OwnerFreezeApproval(
+    string Version,
+    string OwnerId,
+    DateTimeOffset ApprovedAtUtc,
+    string DevelopmentSha256,
+    string HoldoutSha256,
+    string CriteriaSha256,
+    string Declaration);
+
+public sealed record V7FreezeReceipt(
+    string Version,
+    string DevelopmentSha256,
+    string HoldoutSha256,
+    string CriteriaSha256,
+    string ApprovalSha256,
+    int DevelopmentCases,
+    int HoldoutCases,
+    string FreezeState,
+    bool SemanticAcceptanceGranted,
+    bool EnforcementAuthorized,
+    string Limitations);
+
+public static class V7ReviewFreezeValidator
+{
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    /// <summary>
+    /// No V6a provisional conversion exists. Input must be explicitly
+    /// human-adjudicated, with separate independently-authored holdout.
+    /// This validates self-attested review records but cannot independently
+    /// establish that a human actually reviewed them.
+    /// </summary>
+    public static V7FreezeReceipt Validate(
+        string developmentJson, string holdoutJson,
+        string criteriaJson, string ownerApprovalJson)
+    {
+        var development = Read<V7ReviewedCorpus>(developmentJson,
+            "version", "labelStatus", "partition", "reviewMethod",
+            "sourceDeclaration", "cases");
+        var holdout = Read<V7ReviewedCorpus>(holdoutJson,
+            "version", "labelStatus", "partition", "reviewMethod",
+            "sourceDeclaration", "cases");
+        var criteria = Read<V7AcceptanceCriteria>(criteriaJson,
+            "version", "modelName", "modelDigest", "verifierPromptVersion",
+            "verificationSchemaVersion", "scorerVersion",
+            "minimumIdenticalInputRuns", "minimumNaturalSessions",
+            "minimumCrashScenarios", "lanes", "hardGates",
+            "humanQualityReviewProcedure", "thresholdRationale");
+        var approval = Read<V7OwnerFreezeApproval>(ownerApprovalJson,
+            "version", "ownerId", "approvedAtUtc", "developmentSha256",
+            "holdoutSha256", "criteriaSha256", "declaration");
+
+        ValidateCorpus(development, V7Partition.Development);
+        ValidateCorpus(holdout, V7Partition.Holdout);
+        ValidateCriteria(criteria);
+        ValidateApproval(approval);
+
+        var devIds = development.Cases.Select(c => c.CaseId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (holdout.Cases.Any(c => devIds.Contains(c.CaseId)))
+            throw new InvalidDataException(
+                "Reviewed development and holdout case IDs overlap.");
+
+        // Cross-partition equality check independent of record IDs or case
+        // order. A true near-duplicate requires owner inspection; code cannot
+        // prove semantic independence of paraphrased scenarios.
+        var devFingerprints = development.Cases.Select(CaseFingerprint)
+            .ToHashSet(StringComparer.Ordinal);
+        if (holdout.Cases.Any(c =>
+                devFingerprints.Contains(CaseFingerprint(c))))
+            throw new InvalidDataException(
+                "Identical claim/evidence examples appear in both partitions.");
+
+        var devSha = Hash(developmentJson);
+        var holdSha = Hash(holdoutJson);
+        var criterionSha = Hash(criteriaJson);
+        if (!SameHash(approval.DevelopmentSha256, devSha) ||
+            !SameHash(approval.HoldoutSha256, holdSha) ||
+            !SameHash(approval.CriteriaSha256, criterionSha))
+            throw new InvalidDataException(
+                "Owner freeze approval does not pin the exact source bytes.");
+
+        if (approval.ApprovedAtUtc <
+                development.Cases.Max(c => c.ReviewedAtUtc) ||
+            approval.ApprovedAtUtc <
+                holdout.Cases.Max(c => c.ReviewedAtUtc))
+            throw new InvalidDataException(
+                "Owner approval predates a purported human adjudication.");
+
+        // A receipt contains NO per-case IDs, labels, text or private paths.
+        return new V7FreezeReceipt(
+            V7FreezeContract.ApprovalVersion, devSha, holdSha,
+            criterionSha, Hash(ownerApprovalJson), development.Cases.Count,
+            holdout.Cases.Count, "owner-attested-preregistration-validated",
+            SemanticAcceptanceGranted: false,
+            EnforcementAuthorized: false,
+            "The approval is a human attestation, not cryptographic proof of " +
+            "independent review or holdout secrecy. No holdout run, statistical " +
+            "acceptance, natural conversation or crash/latency gate occurred.");
+    }
+
+    private static void ValidateCorpus(
+        V7ReviewedCorpus corpus, V7Partition partition)
+    {
+        if (corpus.Version != V7FreezeContract.ReviewVersion ||
+            corpus.LabelStatus != V7FreezeContract.LabelStatus ||
+            corpus.Partition != partition ||
+            corpus.ReviewMethod != V7FreezeContract.ReviewMethod ||
+            !Valid(corpus.SourceDeclaration, 2000) ||
+            corpus.Cases is null or { Count: < 1 or > V7FreezeContract.MaxCases })
+            throw new InvalidDataException(
+                "Missing human-attested reviewed corpus or wrong partition/version.");
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var fingerprints = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in corpus.Cases)
+        {
+            if (item is null || !ValidId(item.CaseId) ||
+                !ValidId(item.ScenarioGroup) ||
+                !ids.Add(item.CaseId) ||
+                !Enum.IsDefined(item.Category) ||
+                !Enum.IsDefined(item.RhetoricalMode) ||
+                !Enum.IsDefined(item.ReviewedOutcome) ||
+                !Valid(item.ClaimText, 4000) ||
+                !Valid(item.ReviewRationale, 3000) ||
+                item.ReviewRationale.Length < 16 ||
+                !ValidId(item.ReviewerId) ||
+                item.ReviewedAtUtc.Offset != TimeSpan.Zero ||
+                item.ReviewedAtUtc == default ||
+                item.ReviewedAtUtc > DateTimeOffset.UtcNow.AddMinutes(5) ||
+                item.Evidence is null or { Count: > V7FreezeContract.MaxEvidence } ||
+                item.SupportingReferences is null ||
+                item.OpposingReferences is null)
+                throw new InvalidDataException(
+                    "Missing or malformed owner-review record or duplicate case.");
+
+            var refs = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var evidence in item.Evidence)
+            {
+                if (evidence is null ||
+                    !ValidId(evidence.ReferenceId) ||
+                    !refs.Add(evidence.ReferenceId) ||
+                    !Enum.IsDefined(evidence.Kind) ||
+                    !Enum.IsDefined(evidence.AuthorityTier) ||
+                    !Enum.IsDefined(evidence.Visibility) ||
+                    !Valid(evidence.Excerpt, 8000) ||
+                    evidence.IsSuperseded !=
+                        (evidence.AuthorityTier ==
+                         EvidenceAuthorityTier.SupersededRecollection))
+                    throw new InvalidDataException(
+                        "Malformed or repeated reviewed evidence authority.");
+            }
+            var support = item.SupportingReferences;
+            var oppose = item.OpposingReferences;
+            if (support.Count > refs.Count || oppose.Count > refs.Count ||
+                support.Count != support.Distinct(StringComparer.Ordinal).Count() ||
+                oppose.Count != oppose.Distinct(StringComparer.Ordinal).Count() ||
+                support.Intersect(oppose, StringComparer.Ordinal).Any() ||
+                support.Concat(oppose).Any(x => !refs.Contains(x)) ||
+                item.ReviewedOutcome == ClaimVerificationOutcome.ConfirmedContradiction &&
+                    oppose.Count == 0 ||
+                item.ReviewedOutcome == ClaimVerificationOutcome.ConflictingEvidence &&
+                    (support.Count == 0 || oppose.Count == 0) ||
+                item.ReviewedOutcome == ClaimVerificationOutcome.InsufficientEvidence &&
+                    (support.Count > 0 || oppose.Count > 0) ||
+                item.ReviewedOutcome == ClaimVerificationOutcome.NoMaterialIssue &&
+                    oppose.Count > 0)
+                throw new InvalidDataException(
+                    "Human-adjudicated references cannot support the selected outcome.");
+
+            if (!fingerprints.Add(CaseFingerprint(item)))
+                throw new InvalidDataException(
+                    "Reviewed corpus repeats identical claim and evidence under another ID.");
+        }
+    }
+
+    private static void ValidateCriteria(V7AcceptanceCriteria plan)
+    {
+        if (plan.Version != V7FreezeContract.ThresholdVersion ||
+            !Valid(plan.ModelName, 200) ||
+            !Valid(plan.ModelDigest, 256) ||
+            plan.ModelDigest.Equals("unknown", StringComparison.OrdinalIgnoreCase) ||
+            !Valid(plan.VerifierPromptVersion, 160) ||
+            !Valid(plan.VerificationSchemaVersion, 160) ||
+            !Valid(plan.ScorerVersion, 160) ||
+            plan.MinimumIdenticalInputRuns < 2 ||
+            plan.MinimumNaturalSessions < 1 ||
+            plan.MinimumCrashScenarios < 1 ||
+            plan.Lanes is null ||
+            !Valid(plan.HumanQualityReviewProcedure, 4000) ||
+            !Valid(plan.ThresholdRationale, 4000) ||
+            plan.ThresholdRationale.Length < 24 ||
+            plan.HardGates is null ||
+            !plan.HardGates.NoUnauthorizedEvidence ||
+            !plan.HardGates.NoUnchargedModelAttempts ||
+            !plan.HardGates.NoSpeechOrParticipantContextMutation ||
+            !plan.HardGates.NoCorruptRecoveryPromotion ||
+            !plan.HardGates.NoPrivateHoldoutLeakage ||
+            !plan.HardGates.NoNonlocalVerifierInference ||
+            !plan.HardGates.NoEnforcement)
+            throw new InvalidDataException(
+                "V7 release preregistration is incomplete or weakens a mandatory hard gate.");
+
+        var required = Enum.GetNames<ClaimCategory>()
+            .Select(x => "category:" + x)
+            .Append("rhetoric:ProtectedNonAsserted")
+            .ToHashSet(StringComparer.Ordinal);
+        if (plan.Lanes.Count != required.Count ||
+            plan.Lanes.Any(x => x is null || !required.Remove(x.Lane)) ||
+            required.Count != 0)
+            throw new InvalidDataException(
+                "All independent semantic categories and protected rhetoric need frozen criteria.");
+
+        foreach (var lane in plan.Lanes)
+        {
+            if (lane.MinimumIndependentCases < 1 ||
+                lane.MinimumCompletedCases < 1 ||
+                lane.MinimumCompletedCases > lane.MinimumIndependentCases ||
+                lane.MinimumConfirmedPositiveCases < 0 ||
+                lane.MinimumConfirmedPositiveCases > lane.MinimumIndependentCases ||
+                !Fraction(lane.MinimumSelectionCoverage) ||
+                !Fraction(lane.MaximumConfirmedFalsePositiveRate) ||
+                !Fraction(lane.MinimumEvidenceSupportRate) ||
+                lane.MinimumConfirmedPrecision is { } precision &&
+                    !Fraction(precision) ||
+                lane.MinimumEndToEndConfirmedRecall is { } recall &&
+                    !Fraction(recall))
+                throw new InvalidDataException(
+                    "Invalid numeric per-lane preregistration or denominator.");
+
+            if (lane.MinimumConfirmedPositiveCases > 0 &&
+                    (lane.MinimumConfirmedPrecision is null ||
+                     lane.MinimumEndToEndConfirmedRecall is null ||
+                     lane.NotApplicableReason is not null) ||
+                lane.MinimumConfirmedPositiveCases == 0 &&
+                    (lane.MinimumConfirmedPrecision is not null ||
+                     lane.MinimumEndToEndConfirmedRecall is not null ||
+                     !Valid(lane.NotApplicableReason, 500)))
+                throw new InvalidDataException(
+                    "Absent contradiction class must be explicit; positive lanes require precision and recall criteria.");
+        }
+    }
+
+    private static void ValidateApproval(V7OwnerFreezeApproval owner)
+    {
+        if (owner.Version != V7FreezeContract.ApprovalVersion ||
+            !ValidId(owner.OwnerId) ||
+            owner.ApprovedAtUtc.Offset != TimeSpan.Zero ||
+            owner.ApprovedAtUtc == default ||
+            owner.ApprovedAtUtc > DateTimeOffset.UtcNow.AddMinutes(5) ||
+            owner.Declaration != V7FreezeContract.ApprovalDeclaration ||
+            !IsHash(owner.DevelopmentSha256) ||
+            !IsHash(owner.HoldoutSha256) ||
+            !IsHash(owner.CriteriaSha256))
+            throw new InvalidDataException(
+                "Missing exact owner preregistration attestation or SHA-256 pins.");
+    }
+
+    private static T Read<T>(string json, params string[] fields)
+    {
+        if (json is null || Encoding.UTF8.GetByteCount(json) is
+            < 2 or > V7FreezeContract.MaxDocumentBytes)
+            throw new InvalidDataException("Missing or oversized V7a input document.");
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            ExactFields(document.RootElement, fields);
+            if (typeof(T) == typeof(V7ReviewedCorpus))
+            {
+                foreach (var item in document.RootElement.GetProperty("cases").EnumerateArray())
+                {
+                    ExactFields(item, "caseId", "scenarioGroup", "category",
+                        "rhetoricalMode", "claimText", "evidence", "reviewedOutcome",
+                        "supportingReferences", "opposingReferences",
+                        "reviewRationale", "reviewerId", "reviewedAtUtc");
+                    foreach (var ev in item.GetProperty("evidence").EnumerateArray())
+                        ExactFields(ev, "referenceId", "kind", "authorityTier",
+                            "visibility", "excerpt", "isSuperseded");
+                }
+            }
+            if (typeof(T) == typeof(V7AcceptanceCriteria))
+            {
+                foreach (var lane in document.RootElement.GetProperty("lanes").EnumerateArray())
+                    ExactFields(lane, "lane", "minimumIndependentCases",
+                        "minimumCompletedCases", "minimumConfirmedPositiveCases",
+                        "minimumSelectionCoverage",
+                        "maximumConfirmedFalsePositiveRate",
+                        "minimumConfirmedPrecision",
+                        "minimumEndToEndConfirmedRecall",
+                        "minimumEvidenceSupportRate", "notApplicableReason");
+                ExactFields(document.RootElement.GetProperty("hardGates"),
+                    "noUnauthorizedEvidence", "noUnchargedModelAttempts",
+                    "noSpeechOrParticipantContextMutation",
+                    "noCorruptRecoveryPromotion", "noPrivateHoldoutLeakage",
+                    "noNonlocalVerifierInference", "noEnforcement");
+            }
+
+            return JsonSerializer.Deserialize<T>(json, Options)
+                ?? throw new InvalidDataException("V7a input is empty.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException(
+                "Malformed V7a JSON, unknown enum or unexpected field.", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidDataException(
+                "V7a JSON has wrong array or object shape.", ex);
+        }
+    }
+
+    private static void ExactFields(JsonElement element, params string[] names)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("V7a expects a JSON object.");
+        var required = names.ToHashSet(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in element.EnumerateObject())
+            if (!required.Contains(field.Name) || !seen.Add(field.Name))
+                throw new InvalidDataException(
+                    "V7a input has unknown or repeated JSON fields.");
+        if (seen.Count != required.Count)
+            throw new InvalidDataException("V7a input omits a required field.");
+    }
+
+    private static string CaseFingerprint(V7ReviewedCase item)
+    {
+        var serialized = JsonSerializer.Serialize(new
+        {
+            claim = item.ClaimText.Trim().Normalize(NormalizationForm.FormC),
+            evidence = item.Evidence
+                .Select(e => new
+                {
+                    e.Kind, e.AuthorityTier, e.Visibility,
+                    excerpt = e.Excerpt.Trim().Normalize(NormalizationForm.FormC),
+                    e.IsSuperseded
+                })
+                .OrderBy(e => e.Kind).ThenBy(e => e.AuthorityTier)
+                .ThenBy(e => e.Visibility).ThenBy(e => e.excerpt,
+                    StringComparer.Ordinal).ThenBy(e => e.IsSuperseded).ToArray()
+        });
+        return Hash(serialized);
+    }
+
+    private static string Hash(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))
+            .ToLowerInvariant();
+
+    private static bool SameHash(string a, string b) =>
+        string.Equals(a, b, StringComparison.Ordinal);
+
+    private static bool IsHash(string? value) =>
+        value is { Length: 64 } &&
+        Regex.IsMatch(value, "^[a-f0-9]{64}$", RegexOptions.CultureInvariant);
+
+    private static bool Fraction(decimal value) => value is >= 0m and <= 1m;
+    private static bool Valid(string? value, int max) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= max;
+    private static bool ValidId(string? value) =>
+        value is { Length: >= 3 and <= 80 } &&
+        Regex.IsMatch(value, "^[a-z0-9][a-z0-9-]*$",
+            RegexOptions.CultureInvariant);
+}
