@@ -81,6 +81,14 @@ public sealed partial class ConversationStore
         return new V5bEpochRow(epoch, owner, gate, row.GetInt64(3) == 1);
     }
 
+    /// <summary>Read-only enrollment check for the V6c single deferred worker.
+    /// No session becomes enrolled merely by installing the V5b schema.</summary>
+    public bool HasV5bOwnershipEpoch(SessionId session)
+    {
+        EnsureV5bSchemaCompatible();
+        return V5bLatestEpoch(session, null) is not null;
+    }
+
     /// <summary>
     /// Opt in an already-registered V5a session to exclusive fenced writes.
     /// A newly acquired OS gate may advance a prior, still-active epoch after
