@@ -309,6 +309,37 @@ public sealed class VerifierV5cRecoveryTests
     }
 
     [Fact]
+    public void Model_completed_but_judgment_never_durable_cannot_be_invented_on_recovery()
+    {
+        using var f = Setup();
+        var (utterance, job) = Register(f);
+        var initial = Acquire(f);
+        var (claim, packet) = Freeze(f, job, utterance, initial.Owner);
+        var spent = Guid.NewGuid();
+        Assert.True(f.Db.TryReserveV4Attempt(
+            job, spent, V4AttemptPhase.ClaimVerification, initial.Owner));
+        f.Db.FinalizeModeratorAttempt(
+            job.SessionId, spent, ModerationAttemptStatus.Completed, initial.Owner);
+        // A response may have been produced but was NOT sealed as a judgment.
+        initial.Gate.Dispose();
+
+        using var gate = V5bProcessGate.Acquire(f.Path);
+        var current = f.Db.AcquireV5bSession(f.Session.Id, gate);
+        var plan = f.Db.InspectV5cJob(current, job.JobId, Runtime());
+        Assert.Equal(V5cRecoveryDisposition.ReadyForFrozenVerification,
+            plan.Disposition);
+        Assert.Single(plan.PendingClaimIds);
+        Assert.False(f.Db.ReadV5aCheckpoint(job.JobId).IsTerminal);
+        Assert.Empty(f.Db.ReadV5aCheckpoint(job.JobId).ClaimResults);
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.InterruptV5cAbandonedRequest(current, job.JobId, spent));
+        Assert.Equal(1, f.Db.GetV4AttemptCounts(job).UtteranceVerificationAttempts);
+        Assert.Equal(packet.Sha256,
+            Assert.Single(f.Db.ReadV5aCheckpoint(job.JobId).Packets).Sha256);
+        Assert.Equal(claim.ClaimId, Assert.Single(plan.PendingClaimIds));
+    }
+
+    [Fact]
     public void Restart_does_not_steal_an_inflight_current_epoch_request()
     {
         using var f = Setup();
@@ -524,6 +555,33 @@ public sealed class VerifierV5cRecoveryTests
             Assert.Throws<SqliteException>(() => cmd.ExecuteNonQuery());
         }
         Assert.Equal(1, f.Db.GetV4AttemptCounts(job).SessionSharedAttempts);
+    }
+
+    [Fact]
+    public void Partially_installed_recovery_schema_fails_closed()
+    {
+        var path = TempPath();
+        try
+        {
+            using (var connection = new SqliteConnection($"Data Source={path}"))
+            {
+                connection.Open();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = """
+                    CREATE TABLE verifier_v5c_schema
+                        (singleton INTEGER PRIMARY KEY, version TEXT NOT NULL);
+                    INSERT INTO verifier_v5c_schema
+                        VALUES(1, 'verifier-recovery-v5c-1');
+                    """;
+                cmd.ExecuteNonQuery();
+            }
+            using var db = ConversationStore.OpenFile(path);
+            Assert.Throws<InvalidDataException>(() => db.InitializeSchema());
+        }
+        finally
+        {
+            try { File.Delete(path); } catch (IOException) { }
+        }
     }
 
     [Fact]
