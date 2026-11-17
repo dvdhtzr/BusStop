@@ -21,6 +21,7 @@ public sealed record V6CaseScore(
     bool? ReferencesMatchProvisionalRubric,
     bool? ContradictionSpanValid,
     bool? VerdictShapeValid,
+    int CitedReferenceCount,
     int ChargedModelCalls);
 
 public sealed record V6ConfusionCell(
@@ -169,7 +170,7 @@ public static class V6EvaluationScorer
                     item.RhetoricalMode, item.ExpectedOutcome,
                     V6SelectionDisposition.NotSelected, false,
                     VerificationOperationalStatus.NotStarted, null,
-                    null, null, null, null, null, 0));
+                    null, null, null, null, null, 0, 0));
                 continue;
             }
 
@@ -197,6 +198,7 @@ public static class V6EvaluationScorer
                 true, obs.OperationalStatus, obs.Outcome,
                 obs.Outcome is null ? null : obs.Outcome == item.ExpectedOutcome,
                 authorized, rubricMatch, spanValid, shapeValid,
+                obs.SupportingReferences.Count + obs.OpposingReferences.Count,
                 obs.ChargedModelCalls));
         }
 
@@ -339,6 +341,13 @@ public static class V6EvaluationScorer
         var rows = candidates.ToArray();
         var completed = rows.Where(r =>
             r.OperationalStatus == VerificationOperationalStatus.Completed).ToArray();
+        // Do not inflate citation accuracy with legitimate uncited jokes,
+        // opinions or insufficient-evidence results. A confirmed or
+        // conflicting label still enters the denominator if the model
+        // wrongly cites nothing.
+        var citationCases = completed.Where(r => r.CitedReferenceCount > 0 ||
+            r.ExpectedOutcome is ClaimVerificationOutcome.ConfirmedContradiction or
+                ClaimVerificationOutcome.ConflictingEvidence).ToArray();
         int truePositives = completed.Count(c =>
             c.ExpectedOutcome == ClaimVerificationOutcome.ConfirmedContradiction &&
             c.ObservedOutcome == ClaimVerificationOutcome.ConfirmedContradiction);
@@ -373,9 +382,9 @@ public static class V6EvaluationScorer
                 c.ExpectedOutcome == ClaimVerificationOutcome.ConfirmedContradiction),
             completed.Count(c =>
                 c.ExpectedOutcome != ClaimVerificationOutcome.ConfirmedContradiction),
-            completed.Count(c => c.ReferencesAuthorized == true),
-            completed.Count(c => c.ReferencesMatchProvisionalRubric == true),
-            completed.Length,
+            citationCases.Count(c => c.ReferencesAuthorized == true),
+            citationCases.Count(c => c.ReferencesMatchProvisionalRubric == true),
+            citationCases.Length,
             completed.Count(c => c.ContradictionSpanValid == false),
             completed.Count(c => c.VerdictShapeValid == false),
             rows.Sum(c => c.ChargedModelCalls));
