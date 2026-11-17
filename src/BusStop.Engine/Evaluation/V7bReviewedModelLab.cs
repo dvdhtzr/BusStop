@@ -306,8 +306,12 @@ public sealed class V7bReviewedModelLab
         var scope = new VerificationEvidenceScope(
             session, opportunity, speaker, 0,
             evidence.ToDictionary(e => e.ReferenceId, StringComparer.Ordinal));
-        EvidenceVerificationValidator.ValidatePacket(
-            packet, claim, job, utterance, scope);
+        // Protected negative-extraction examples are never dispatched to
+        // the model. Their V3 span/selection score must not depend on a V4
+        // evidence packet that the runtime would never request.
+        if (item.ShouldExtractClaim)
+            EvidenceVerificationValidator.ValidatePacket(
+                packet, claim, job, utterance, scope);
         return new LabUnit(job, utterance,
             new V3PackagedClaim(claim, packet, scope));
     }
