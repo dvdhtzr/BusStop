@@ -31,8 +31,9 @@ No development labels, transcript text, or reviewer notes are checked into GitHu
 
 V7dProgressAnalyzer accepts ONLY a previously validated, bounded transcript:
 - normalize Unicode letter/number tokens and compare normalized full-text equality with earlier turns
-- candidate lexical overlap uses word-set Jaccard >=0.72 over the preceding six turns, requiring at least eight input tokens and five distinct words
-- candidate six-turn loop-pressure window requires at least three exact/lexical signals
+- strict lexical-overlap candidate uses word-set Jaccard >=0.72 over the preceding six turns, requiring at least eight input tokens and five distinct words
+- exploratory broad-echo review candidate uses the same bounded comparison at Jaccard >=0.25, only where neither full-copy nor strict overlap already fired; this is deliberately recall-oriented and false-positive-prone, NOT an evidence-backed finding
+- candidate six-turn loop-pressure window requires at least three exact, strict overlap or exploratory broad-echo signals
 - these are REVIEW CANDIDATES, not proof of semantic stagnation
 - turn-level signals contain private sequences, hashed text, prior references and similarity; safe aggregate contains only counts and the transcript fingerprint, never actual speech or speaker identity
 - maxima: 2,000 turns, 20,000 characters per utterance, bounded regex execution
@@ -48,7 +49,7 @@ No holdout loading, web access, Ollama or conversation writes. The original tran
 
 ## V7d-3: development calibration and gates
 
-Only fully labeled and manually attested development worksheets are accepted. Human UnproductiveLoop labels are compared with combined exact-copy / lexical-overlap / loop-pressure candidate signals. Report TP/FP/FN/TN and optional precision, recall, and healthy-disagreement/callback false-alarm rate. Undefined denominators are NULL. Contradictory or tampered turn labels fail closed.
+Only fully labeled and manually attested development worksheets are accepted. Human UnproductiveLoop labels are compared with combined exact-copy / lexical-overlap / broad-echo / loop-pressure candidate signals. Report TP/FP/FN/TN and optional precision, recall, and healthy-disagreement/callback false-alarm rate. Undefined denominators are NULL. Contradictory or tampered turn labels fail closed.
 
 Preliminary minimum interpretable development sample: 20 reviewed positive turns, 20 negative turns, and 10 healthy-disagreement/callback controls. The 35-turn baseline ALONE cannot meet both 20/20 minimums; an insufficient-case result is expected, not an implementation failure. Additional independently sourced development cases require later authorization.
 
@@ -71,7 +72,7 @@ Reuse the ORIGINAL previously identified run with $run.Db, $run.Session and $run
 
     dotnet run --project .\tests\BusStop.V7.ProgressLab\BusStop.V7.ProgressLab.csproj -c Release --no-build -- --db $run.Db --session $run.Session --coverage $run.Coverage --mode analyze
 
-Known exact-copy cue: local private review should reveal a candidate at turn 21, referring to turn 20. This real-baseline check is required but is NOT hardcoded in public unit tests.
+Known exact-copy cue: local private review should reveal a candidate at turn 21, referring to turn 20. This real-baseline check is required but is NOT hardcoded in public unit tests. The first owner-local V7d run returned ExactCopyCandidates=1 but strict LexicalOverlapCandidates=0 and TurnsInsideCandidateLoopWindows=0, despite obvious late conversational stagnation. This motivated a distinct low-threshold broad-echo candidate family, not a semantic verdict. On the revised build, expected broad echoes and some loop-pressure candidates should be observed and manually inspected for false positives; no particular number is hardcoded as success.
 
 OPTIONAL private worksheet, only if owner deliberately wants one file in the ALREADY EXISTING natural-run directory:
 
