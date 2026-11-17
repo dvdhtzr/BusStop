@@ -509,3 +509,9 @@ data/v6b-safe/
 # V7c private real-session utterances, human reviews, and local aggregate outputs
 **/v7c-private/
 **/v7c-safe/
+
+# V7d owner-only turn annotations, local evaluation worksheets and reports
+**/v7d-private/
+**/v7d-safe/
+**/v7d-*.private.json
+**/v7d-*.safe.json
