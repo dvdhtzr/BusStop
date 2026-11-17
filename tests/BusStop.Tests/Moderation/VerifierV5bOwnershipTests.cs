@@ -287,15 +287,13 @@ public sealed class VerifierV5bOwnershipTests
     {
         using var f = Setup();
         using var other = Setup();
-        _ = Register(f);
+        var (_, registeredJob) = Register(f);
         _ = Register(other);
         using var wrongGate = V5bProcessGate.Acquire(other.Path);
         Assert.Throws<InvalidOperationException>(() =>
             f.Db.AcquireV5bSession(f.Session.Id, wrongGate));
-        Assert.Empty(f.Db.ReadV5aCheckpoint(
-            // A separate randomized V5a job is still readable without ownership.
-            f.Db.GetCommittedUtterances(f.Session.Id)
-                .Select(_ => Guid.Empty).FirstOrDefault()) .Events);
+        // The wrong lock cannot modify or prevent ordinary read-only inspection.
+        Assert.Single(f.Db.ReadV5aCheckpoint(registeredJob.JobId).Events);
     }
 
     [Fact]
