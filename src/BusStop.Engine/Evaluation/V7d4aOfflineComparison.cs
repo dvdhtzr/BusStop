@@ -87,7 +87,6 @@ public static class V7d4aOfflineComparison
 
         var sequenceById = committedTranscript.ToDictionary(x => x.Id, x => x.Sequence);
         var turns = new List<V7d4aPrivateTurnTrace>();
-        var traceHashInput = new StringBuilder();
 
         for (int i = 0; i < committedTranscript.Count; i++)
         {
@@ -117,22 +116,16 @@ public static class V7d4aOfflineComparison
                     selection.Utterances.Select(x => x.Speaker).Distinct().Count(),
                     selection.SelectionSha256);
                 variantTraces.Add(trace);
-                traceHashInput.Append(observed.Sequence.ToString(CultureInfo.InvariantCulture))
-                    .Append('|').Append(variant).Append('|')
-                    .Append(trace.SelectionSha256).Append('|')
-                    .Append(trace.ReplyReferenceVisible ? "1" : "0").Append('\n');
             }
             turns.Add(new V7d4aPrivateTurnTrace(
                 observed.Sequence, observed.Speaker.ToString(),
                 replySequence, Array.AsReadOnly(variantTraces.ToArray())));
         }
 
-        var traceDigest = Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes(traceHashInput.ToString())))
-            .ToLowerInvariant();
+        var immutableTurns = Array.AsReadOnly(turns.ToArray());
         return new V7d4aPrivateComparison(
             ContractVersion, transcriptSha256, turns.Count,
-            Array.AsReadOnly(turns.ToArray()), traceDigest,
+            immutableTurns, ComputeTraceSha(transcriptSha256, immutableTurns),
             LiveBehaviorChanged: false, HumanQualityReviewed: false,
             ModelInferencePerformed: false);
     }
@@ -146,6 +139,8 @@ public static class V7d4aOfflineComparison
             privateComparison.LiveBehaviorChanged ||
             privateComparison.ModelInferencePerformed ||
             privateComparison.HumanQualityReviewed ||
+            privateComparison.TraceSha256 != ComputeTraceSha(
+                privateComparison.TranscriptSha256, privateComparison.Turns) ||
             privateComparison.Turns.Where((turn, index) =>
                 turn.ObservedTurnSequence != index + 1 ||
                 turn.Variants.Count != Variants.Length).Any())
@@ -183,4 +178,43 @@ public static class V7d4aOfflineComparison
             "No model responses were generated, no conversation quality " +
             "was assessed, and the known V7c transcript is DEVELOPMENT only.");
     }
+
+    /// <summary>
+    /// A canonical digest binds the fingerprint, turn speaker/reply, selected
+    /// sequences, selected-text hashes, anchor reasons and context counts.
+    /// It is read-only evidence, not a signed or authenticated owner judgment.
+    /// </summary>
+    private static string ComputeTraceSha(
+        string transcriptSha256,
+        IReadOnlyList<V7d4aPrivateTurnTrace> turns)
+    {
+        var serialized = new StringBuilder(transcriptSha256).Append('\n');
+        foreach (var turn in turns)
+        {
+            serialized.Append(turn.ObservedTurnSequence.ToString(CultureInfo.InvariantCulture))
+                .Append('|').Append(turn.SpeakerId)
+                .Append('|').Append(turn.ExistingReplyReferenceSequence?.ToString(
+                    CultureInfo.InvariantCulture) ?? "-").Append('\n');
+            foreach (var v in turn.Variants)
+            {
+                serialized.Append(v.Variant).Append('|')
+                    .Append(v.SelectionSha256).Append('|')
+                    .Append(v.ReplyReferenceVisible ? "1" : "0").Append('|')
+                    .Append(v.SelectedUtteranceCharacters.ToString(
+                        CultureInfo.InvariantCulture)).Append('|')
+                    .Append(v.SelectedSpeakerCount.ToString(
+                        CultureInfo.InvariantCulture)).Append('|');
+                foreach (var seq in v.SelectedSequences)
+                    serialized.Append(seq.ToString(CultureInfo.InvariantCulture)).Append(',');
+                serialized.Append('|');
+                foreach (var anchor in v.Anchors)
+                    serialized.Append(anchor.Sequence.ToString(CultureInfo.InvariantCulture))
+                        .Append(':').Append(anchor.Reason).Append(',');
+                serialized.Append('\n');
+            }
+        }
+        return Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(serialized.ToString()))).ToLowerInvariant();
+    }
+
 }
