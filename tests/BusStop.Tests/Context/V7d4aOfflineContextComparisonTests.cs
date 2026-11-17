@@ -210,6 +210,28 @@ public sealed class V7d4aOfflineContextComparisonTests
     }
 
     [Fact]
+    public void Safe_export_rejects_edited_private_selection_trace()
+    {
+        var analysis = V7d4aOfflineComparison.Compare(
+            History(15), new string('d', 64));
+        var changed = analysis.Turns.ToArray();
+        var variants = changed[8].Variants.ToArray();
+        variants[1] = variants[1] with
+        {
+            SelectedSequences = Array.AsReadOnly(new long[] { 999 })
+        };
+        changed[8] = changed[8] with
+        {
+            Variants = Array.AsReadOnly(variants)
+        };
+        Assert.Throws<InvalidDataException>(() =>
+            V7d4aOfflineComparison.ExportSafe(analysis with
+            {
+                Turns = Array.AsReadOnly(changed)
+            }));
+    }
+
+    [Fact]
     public void Comparison_rejects_future_reply_reference()
     {
         var history = History(4);
