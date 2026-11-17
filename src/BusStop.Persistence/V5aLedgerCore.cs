@@ -287,7 +287,7 @@ public sealed partial class ConversationStore
             }
         }
         var packetEnvelope = packets
-            .OrderBy(p => p.Content.ClaimId)
+            .OrderBy(p => p.Content.ClaimId.ToString("D"), StringComparer.Ordinal)
             .Select(p => new V5aPacketEnvelope(
                 p.PacketId, p.Content.ClaimId, p.Sha256)).ToArray();
         if (packets.Count > V5aLedgerContract.MaxPackets ||
