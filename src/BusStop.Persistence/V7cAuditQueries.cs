@@ -7,8 +7,14 @@ namespace BusStop.Persistence;
 /// the existing V5a checkpoint-chain validator before it is counted.</summary>
 public sealed partial class ConversationStore
 {
-    public IReadOnlyList<Guid> ListV7cVerificationJobs(SessionId session)
+    public IReadOnlyList<Guid> ListV7cVerificationJobs(
+        SessionId session, string evaluationKey)
     {
+        if (string.IsNullOrWhiteSpace(evaluationKey) ||
+            evaluationKey.Length > 128 ||
+            !evaluationKey.StartsWith(V5aLedgerContract.EvaluationPrefix,
+                StringComparison.Ordinal))
+            throw new InvalidDataException("Invalid read-only V7c evaluation key.");
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
             SELECT job_id FROM verifier_v5a_jobs
@@ -16,8 +22,7 @@ public sealed partial class ConversationStore
             ORDER BY registered_at, job_id;
             """;
         cmd.Parameters.AddWithValue("@session", session.ToString());
-        cmd.Parameters.AddWithValue("@evaluation",
-            BusStop.Moderation.Verification.EvidenceVerifierV1.EvaluationPrefix + "v6c-shadow-v1");
+        cmd.Parameters.AddWithValue("@evaluation", evaluationKey);
         var ids = new List<Guid>();
         using var rows = cmd.ExecuteReader();
         while (rows.Read())
