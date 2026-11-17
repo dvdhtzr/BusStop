@@ -32,6 +32,7 @@ public sealed partial class ConversationStore
 
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
+        V5cAssertJobNotStopped(tx, jobId);
         if (V5aStageIsSame(tx, jobId, "claims:sealed", snapshot))
         {
             tx.Commit();
@@ -120,6 +121,7 @@ public sealed partial class ConversationStore
             // Repeated freeze is read-only but still requires valid ownership.
             using var replayTx = _connection.BeginTransaction(deferred: false);
             V5bAssertSessionOwner(replayTx, checkpoint.Job.SessionId, ownership);
+            V5cAssertJobNotStopped(replayTx, jobId);
             replayTx.Commit();
             return;
         }
@@ -145,6 +147,7 @@ public sealed partial class ConversationStore
 
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
+        V5cAssertJobNotStopped(tx, jobId);
         if (V5aStageIsSame(tx, jobId, "packets:sealed", snapshot))
         {
             tx.Commit();
@@ -220,6 +223,7 @@ public sealed partial class ConversationStore
 
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
+        V5cAssertJobNotStopped(tx, jobId);
         V5aVerifyChargedRequest(tx, checkpoint.Job, requestId, phase);
         // Never attach an attempt from a superseded owner epoch to a new
         // checkpoint event, even if the old attempt remains durably charged.
@@ -303,6 +307,7 @@ public sealed partial class ConversationStore
         var key = "result:" + V5aId(result.ClaimId);
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
+        V5cAssertJobNotStopped(tx, jobId);
         // A later owner may inspect an old charged request, but must not
         // author a NEW judgment against that earlier inference's identity.
         if (verificationRequestId is { } request)
@@ -359,6 +364,7 @@ public sealed partial class ConversationStore
 
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
+        V5cAssertJobNotStopped(tx, jobId);
         if (V5aStageIsSame(tx, jobId, "summary:sealed", json))
         {
             tx.Commit();

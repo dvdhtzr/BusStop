@@ -29,6 +29,7 @@ public sealed partial class ConversationStore : IDisposable
         // additively. M1/V2/V4 authoritative tables are never rewritten.
         EnsureV5aLedgerSchemaCompatible();
         EnsureV5bSchemaCompatible();
+        EnsureV5cSchemaCompatible();
         Execute(Schema.Ddl);
         EnsureModerationMarkerColumn(); // add-only migration for older SQLite databases
         EnsureShadowSamplingColumn();
@@ -37,6 +38,8 @@ public sealed partial class ConversationStore : IDisposable
         EnsureV5aLedgerSchemaCompatible();
         Execute(V5bOwnershipSchema.Ddl);
         EnsureV5bSchemaCompatible();
+        Execute(V5cRecoverySchema.Ddl);
+        EnsureV5cSchemaCompatible();
     }
 
     // --- writes -------------------------------------------------------------

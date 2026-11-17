@@ -93,6 +93,7 @@ public sealed partial class ConversationStore
 
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, job.SessionId, ownership);
+        V5cAssertJobNotStopped(tx, job.JobId);
         using (var cmd = _connection.CreateCommand())
         {
             cmd.Transaction = tx;

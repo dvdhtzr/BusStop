@@ -308,6 +308,17 @@ public sealed partial class ConversationStore
         {
             V5bAssertSessionOwner(tx, session, ownership);
             V5bAssertAttemptEpoch(tx, session, requestId, ownership);
+            // A stopped evaluation cannot acquire a post-stop judgment by
+            // finalizing an outstanding verifier call through the V4 API.
+            using var jobCmd = _connection.CreateCommand();
+            jobCmd.Transaction = tx;
+            jobCmd.CommandText = """
+                SELECT job_id FROM v4_verifier_attempt_phases
+                WHERE request_id=@request;
+                """;
+            jobCmd.Parameters.AddWithValue("@request", requestId.ToString("D"));
+            if (jobCmd.ExecuteScalar() is string jobText)
+                V5cAssertJobNotStopped(tx, Guid.Parse(jobText));
         }
         else if (ownership is not null)
             throw new InvalidOperationException(
