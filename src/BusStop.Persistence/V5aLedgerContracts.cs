@@ -38,6 +38,9 @@ public sealed record V5aAttemptLink(
     V4AttemptPhase Phase,
     IReadOnlyList<Guid> ClaimIds);
 
+public sealed record V5aClaimResultLink(
+    Guid ClaimId, Guid? VerificationRequestId);
+
 /// <summary>
 /// Restored strictly from durable frozen records. A checkpoint is NEVER rebuilt
 /// from current history, fresh retrieval or a newer model. V5b/V5c must first
@@ -56,4 +59,6 @@ public sealed record V5aLedgerCheckpoint(
     VerificationObservationSummary? Summary)
 {
     public bool IsTerminal => Summary is not null;
+    public IReadOnlyList<V5aClaimResultLink> ResultLinks { get; init; } =
+        Array.Empty<V5aClaimResultLink>();
 }
