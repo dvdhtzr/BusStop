@@ -195,7 +195,8 @@ public sealed class VerifierV5aLedgerTests
                 db.FinalizeModeratorAttempt(job.SessionId, requestId,
                     ModerationAttemptStatus.Completed);
 
-                db.RecordV5aClaimResult(jobId, CleanResult(claim, packet));
+                db.RecordV5aClaimResult(jobId, CleanResult(claim, packet),
+                    requestId);
                 db.SealV5aSummary(jobId, Summary(jobId, 1, 1, 1, 0));
                 var staged = db.ReadV5aCheckpoint(jobId);
                 Assert.True(staged.IsTerminal);
@@ -240,17 +241,26 @@ public sealed class VerifierV5aLedgerTests
         db.RegisterV5aJob(job, Evaluation);
         db.SealV5aClaims(job.JobId, new[] { claim });
         db.SealV5aPackets(job.JobId, new[] { packet });
-        db.RecordV5aClaimResult(job.JobId, result);
+        var requestId = Guid.NewGuid();
+        Assert.True(db.TryReserveV4Attempt(
+            job, requestId, V4AttemptPhase.ClaimVerification));
+        db.LinkV5aChargedAttempt(job.JobId, requestId,
+            V4AttemptPhase.ClaimVerification, new[] { claim.ClaimId });
+        db.FinalizeModeratorAttempt(job.SessionId, requestId,
+            ModerationAttemptStatus.Completed);
+        db.RecordV5aClaimResult(job.JobId, result, requestId);
         db.SealV5aSummary(job.JobId, summary);
 
         db.RegisterV5aJob(job, Evaluation);
         db.SealV5aClaims(job.JobId, new[] { claim });
         db.SealV5aPackets(job.JobId, new[] { packet });
-        db.RecordV5aClaimResult(job.JobId, result);
+        db.LinkV5aChargedAttempt(job.JobId, requestId,
+            V4AttemptPhase.ClaimVerification, new[] { claim.ClaimId });
+        db.RecordV5aClaimResult(job.JobId, result, requestId);
         db.SealV5aSummary(job.JobId, summary);
 
         var stored = db.ReadV5aCheckpoint(job.JobId);
-        Assert.Equal(5, stored.Events.Count);
+        Assert.Equal(6, stored.Events.Count);
         Assert.True(stored.IsTerminal);
         Assert.Throws<InvalidDataException>(
             () => db.SealV5aClaims(job.JobId, new[] { Claim(job, u) }));
@@ -275,7 +285,16 @@ public sealed class VerifierV5aLedgerTests
         db.SealV5aPackets(job.JobId, new[] { packet });
         Assert.Throws<InvalidDataException>(
             () => db.SealV5aSummary(job.JobId, Summary(job.JobId, 1, 1, 1, 0)));
-        db.RecordV5aClaimResult(job.JobId, CleanResult(claim, packet));
+        Assert.Throws<InvalidDataException>(
+            () => db.RecordV5aClaimResult(job.JobId, CleanResult(claim, packet)));
+        var requestId = Guid.NewGuid();
+        Assert.True(db.TryReserveV4Attempt(
+            job, requestId, V4AttemptPhase.ClaimVerification));
+        db.LinkV5aChargedAttempt(job.JobId, requestId,
+            V4AttemptPhase.ClaimVerification, new[] { claim.ClaimId });
+        db.FinalizeModeratorAttempt(job.SessionId, requestId,
+            ModerationAttemptStatus.Completed);
+        db.RecordV5aClaimResult(job.JobId, CleanResult(claim, packet), requestId);
         db.SealV5aSummary(job.JobId, Summary(job.JobId, 1, 1, 1, 0));
 
         Assert.Throws<InvalidDataException>(() =>
