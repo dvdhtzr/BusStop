@@ -193,6 +193,62 @@ public sealed class V7d4aOfflineContextComparisonTests
     }
 
     [Fact]
+    public void C_excludes_exact_repeated_elective_anchors_but_keeps_required_reply()
+    {
+        var history = History(22);
+        for (int i = 0; i < 16; i++)
+            history[i] = history[i] with { Text = "ok" };
+        history[10] = history[10] with
+        {
+            Text = "The factory will reopen but wages remain low for workers."
+        };
+        history[11] = history[11] with
+        {
+            Text = "THE FACTORY WILL REOPEN BUT WAGES REMAIN LOW FOR WORKERS!"
+        };
+
+        // Without duplicate suppression, these are the only two eligible
+        // elective anchors and both would repeat the same sentence.
+        var selection = V7d4aOfflineContextSelector.Select(
+            history, null, V7d4aContextVariant.Selective6Plus2);
+        Assert.Equal(6, selection.Utterances.Count);
+        Assert.Empty(selection.Anchors);
+        Assert.DoesNotContain(selection.Utterances, t =>
+            t.Sequence is 11 or 12);
+
+        // But an explicit, genuine committed reply reference must remain
+        // visible even when its wording was repeated elsewhere.
+        var required = V7d4aOfflineContextSelector.Select(
+            history, history[11].Id, V7d4aContextVariant.Selective6Plus2);
+        Assert.Equal(7, required.Utterances.Count);
+        Assert.Contains(required.Anchors, a =>
+            a.Sequence == 12 &&
+            a.Reason == "RequiredCommittedReplyReference");
+        Assert.DoesNotContain(required.Utterances, t => t.Sequence == 11);
+        Assert.True(required.ReplyReferenceVisible);
+    }
+
+    [Fact]
+    public void Aggregate_reports_when_selective_equals_recent8_instead_of_counting_all_anchors_as_novel()
+    {
+        var shortHistory = History(5);
+        var result = V7d4aOfflineComparison.Compare(
+            shortHistory, new string('a', 64));
+        var safe = V7d4aOfflineComparison.ExportSafe(result);
+        Assert.Equal(5, safe.SelectiveContextsIdenticalToRecent8);
+        Assert.Equal(0, safe.SelectiveContextsChangedFromRecent8);
+        Assert.Equal(0, safe.SelectiveAnchorsOutsideRecent8);
+
+        var longer = V7d4aOfflineComparison.ExportSafe(
+            V7d4aOfflineComparison.Compare(
+                History(25), new string('b', 64)));
+        Assert.Equal(25, longer.SelectiveContextsIdenticalToRecent8 +
+            longer.SelectiveContextsChangedFromRecent8);
+        Assert.True(longer.SelectiveAnchorsOutsideRecent8 > 0);
+        Assert.True(longer.SelectiveContextsChangedFromRecent8 > 0);
+    }
+
+    [Fact]
     public void Comparison_reports_missing_known_reply_references()
     {
         var history = History(30);
