@@ -169,7 +169,8 @@ public sealed partial class ConversationStore
         }
         catch (Exception ex) when (ex is InvalidDataException or JsonException
                                or SqliteException or FormatException
-                               or OverflowException or ArgumentException)
+                               or OverflowException or ArgumentException
+                               or InvalidOperationException)
         {
             return V5cStop(ownership, jobId,
                 V5cRecoveryDisposition.StoppedIncompatibleCheckpoint,
