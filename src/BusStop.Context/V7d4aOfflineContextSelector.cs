@@ -33,7 +33,7 @@ public sealed record V7d4aContextSelection(
 
 public static class V7d4aOfflineContextSelector
 {
-    public const string ContractVersion = "busstop-v7d-4a-selection-v1";
+    public const string ContractVersion = "busstop-v7d-4a-selection-v2";
     private const int RecentSelective = 6;
     private const int MaxAnchors = 2;
     private const int EarlierCandidateLookback = 14;
@@ -94,6 +94,16 @@ public static class V7d4aOfflineContextSelector
                     reply.Sequence, "RequiredCommittedReplyReference"));
             }
 
+            // Elective anchors should not reintroduce a verbatim line
+            // already repeated elsewhere in the committed conversation.
+            // Mandatory reply references remain an exception: visibility of
+            // the explicitly referenced utterance takes precedence.
+            var duplicateTexts = committedBeforeOpportunity
+                .GroupBy(x => Normalize(x.Text), StringComparer.Ordinal)
+                .Where(g => g.Key.Length > 0 && g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet(StringComparer.Ordinal);
+
             var recentSpeakers = recent.Select(x => x.Speaker).ToHashSet();
             var anchorSpeakers = new HashSet<CharacterId>(
                 anchors.Select(a => chosen.Single(x => x.Sequence == a.Sequence).Speaker));
@@ -104,7 +114,8 @@ public static class V7d4aOfflineContextSelector
             var earlierPool = committedBeforeOpportunity
                 .Take(Math.Max(0, committedBeforeOpportunity.Count - RecentSelective))
                 .TakeLast(EarlierCandidateLookback)
-                .Where(x => chosen.All(c => c.Id != x.Id))
+                .Where(x => chosen.All(c => c.Id != x.Id) &&
+                    !duplicateTexts.Contains(Normalize(x.Text)))
                 .Select(x =>
                 {
                     var tokens = Tokenize(x.Text);
@@ -198,6 +209,10 @@ public static class V7d4aOfflineContextSelector
                 "Selected context was silently truncated by the supplied builder.");
         return built;
     }
+
+    private static string Normalize(string text) =>
+        string.Join(" ", Words.Matches(text.ToLowerInvariant())
+            .Cast<Match>().Select(x => x.Value));
 
     private static HashSet<string> Tokenize(string text) =>
         Words.Matches(text.ToLowerInvariant()).Cast<Match>()
