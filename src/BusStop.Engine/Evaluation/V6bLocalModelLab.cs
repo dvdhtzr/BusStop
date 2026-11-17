@@ -159,7 +159,7 @@ public sealed class V6bLocalModelLab
                         {
                             status = VerificationOperationalStatus.InvalidResponse;
                             // Error *type*, never private raw model text
-                            diagnosis = "v4-parser-" + ex.GetType().Name;
+                            diagnosis = ClassifyV4Rejection(ex);
                         }
                     }
                 }
@@ -201,6 +201,25 @@ public sealed class V6bLocalModelLab
             "V5 budget/session orchestration and automatic rhetorical short-circuiting. " +
             "Labels are unreviewed; V4 host parsing is not semantic proof.");
         return new V6bLabRun(score, audit);
+    }
+
+    private static string ClassifyV4Rejection(Exception ex)
+    {
+        // These are fixed HOST-generated validator messages, not model
+        // supplied text or excerpts. Preserve only a bounded reason category.
+        var message = ex.Message;
+        if (ex is InvalidDataException &&
+            (message.Contains("unauthorized", StringComparison.OrdinalIgnoreCase) ||
+             message.Contains("category-appropriate positive opposing evidence",
+                 StringComparison.OrdinalIgnoreCase) ||
+             message.Contains("non-superseded, lane-relevant",
+                 StringComparison.OrdinalIgnoreCase) ||
+             message.Contains("source identity", StringComparison.OrdinalIgnoreCase) ||
+             message.Contains("host-authorized", StringComparison.OrdinalIgnoreCase) ||
+             message.Contains("scope", StringComparison.OrdinalIgnoreCase)))
+            return "v4-evidence-scope-rejection";
+
+        return "v4-structural-rejection";
     }
 
     private static V6bFixtureUnit FreezeSynthetic(
