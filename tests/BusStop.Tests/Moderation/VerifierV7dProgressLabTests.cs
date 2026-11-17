@@ -57,6 +57,30 @@ public sealed class VerifierV7dProgressLabTests
     }
 
     [Fact]
+    public void Broad_echo_and_sustained_loop_pressure_are_review_cues_not_verdicts()
+    {
+        var rows = Turns(
+            "Factory workers need training and fair wages when the plant reopens next year.",
+            "The factory may reopen next year but workers deserve wages and practical retraining.",
+            "Those workers need real training at the factory and reliable wages next year.",
+            "If the factory reopens, the workers will need training and better wages.",
+            "The workers might receive training, yet wages at that factory remain uncertain.",
+            "Training workers for the reopening factory must not disguise lower wages.");
+        var analysis = V7dProgressAnalyzer.Analyze(rows, FakeTranscriptSha);
+        var safe = V7dProgressAnalyzer.ExportSafe(analysis, rows);
+
+        Assert.True(safe.BroadLexicalEchoCandidates > 0);
+        Assert.True(safe.TurnsInsideCandidateLoopWindows > 0);
+        Assert.False(safe.SemanticAccuracyAccepted);
+        Assert.False(safe.BehavioralInterventionAuthorized);
+        Assert.All(analysis.Signals, x =>
+            Assert.False(x.ExactPriorUtterance));
+
+        // Shared terminology on its own does NOT prove unproductive speech.
+        Assert.Contains("REVIEW CANDIDATES", safe.Warning);
+    }
+
+    [Fact]
     public void Healthy_callback_and_deliberate_quote_are_not_auto_labeled_failures()
     {
         var rows = Turns(
