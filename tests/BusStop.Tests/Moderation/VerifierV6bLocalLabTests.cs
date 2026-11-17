@@ -129,6 +129,27 @@ public sealed class VerifierV6bLocalLabTests
         Assert.Null(result.Score.Overall.ConfirmedPrecision);
         Assert.Equal(1, result.Score.Overall.ChargedModelCalls);
         Assert.Null(Assert.Single(result.PrivateAudit.Cases).HostValidatedJudgment);
+        Assert.Equal(1, V6bSafeExporter.From(result).StructuredVerdictRejections);
+    }
+
+    [Fact]
+    public void Unauthorized_model_citation_is_a_scope_rejection_not_a_success()
+    {
+        var model = new StubModel(request =>
+        {
+            var valid = Reply(request,
+                ClaimVerificationOutcome.ConfirmedContradiction, true);
+            return ModelResponse.Responded(valid.RawJson!.Replace(
+                "src-1", "forged-not-authorized", StringComparison.Ordinal));
+        });
+        var run = new V6bLocalModelLab(model).Run(
+            Corpus(), "unit-forged-citation", 1);
+        Assert.Equal(1, run.Score.Overall.InvalidResponses);
+        Assert.Equal(0, run.Score.Overall.Completed);
+        Assert.Equal("v4-evidence-scope-rejection",
+            Assert.Single(run.PrivateAudit.Cases).DiagnosticCode);
+        Assert.Equal(1, V6bSafeExporter.From(run).HostEvidenceScopeRejections);
+        Assert.Equal(0, V6bSafeExporter.From(run).StructuredVerdictRejections);
     }
 
     [Fact]
@@ -157,6 +178,7 @@ public sealed class VerifierV6bLocalLabTests
         Assert.Equal(1, result.Score.Overall.InvalidResponses);
         Assert.Equal("generation-truncated",
             Assert.Single(result.PrivateAudit.Cases).DiagnosticCode);
+        Assert.Equal(1, V6bSafeExporter.From(result).TruncatedResponses);
     }
 
     [Fact]
