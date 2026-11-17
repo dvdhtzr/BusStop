@@ -357,7 +357,9 @@ public static class V7ReviewedScorer
                 observed.SupportingReferences.Count == 0 &&
                 observed.OpposingReferences.Count == 0,
             ClaimVerificationOutcome.NoMaterialIssue =>
-                observed.OpposingReferences.Count == 0,
+                observed.OpposingReferences.Count == 0 &&
+                (expected.SupportingReferences.Count == 0 ||
+                 observed.SupportingReferences.Any(expectedSupports.Contains)),
             _ => false
         };
     }
