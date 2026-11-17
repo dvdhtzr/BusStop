@@ -36,6 +36,26 @@ internal static class V5bOwnershipSchema
                 REFERENCES verifier_v5b_epochs(session_id, epoch)
         );
 
+        -- An inference reserved under epoch N cannot later be promoted
+        -- to Completed by an owner of N+1. Do not rewrite old charge rows.
+        CREATE TABLE IF NOT EXISTS verifier_v5b_attempt_epochs (
+            request_id TEXT PRIMARY KEY
+                REFERENCES v4_verifier_attempt_phases(request_id),
+            session_id TEXT NOT NULL REFERENCES sessions(id),
+            epoch INTEGER NOT NULL,
+            owner_id TEXT NOT NULL,
+            gate_id TEXT NOT NULL,
+            FOREIGN KEY(session_id, epoch)
+                REFERENCES verifier_v5b_epochs(session_id, epoch)
+        );
+
+        CREATE TRIGGER IF NOT EXISTS v5b_attempt_epochs_no_update
+            BEFORE UPDATE ON verifier_v5b_attempt_epochs
+            BEGIN SELECT RAISE(ABORT, 'Immutable V5b charged attempt epoch'); END;
+        CREATE TRIGGER IF NOT EXISTS v5b_attempt_epochs_no_delete
+            BEFORE DELETE ON verifier_v5b_attempt_epochs
+            BEGIN SELECT RAISE(ABORT, 'Immutable V5b charged attempt epoch'); END;
+
         CREATE TRIGGER IF NOT EXISTS v5b_schema_no_update
             BEFORE UPDATE ON verifier_v5b_schema
             BEGIN SELECT RAISE(ABORT, 'Immutable V5b schema pin'); END;
