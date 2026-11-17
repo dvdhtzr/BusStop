@@ -301,6 +301,7 @@ public sealed partial class ConversationStore
             requireEnrollment: true);
         if (V5cSessionForJob(jobId, tx) != ownership.Session)
             throw new InvalidOperationException("Cross-session V5c stop denied.");
+        bool alreadyStopped = false;
         using (var cmd = _connection.CreateCommand())
         {
             cmd.Transaction = tx;
@@ -316,10 +317,14 @@ public sealed partial class ConversationStore
                     row.GetString(1) != reason)
                     throw new InvalidDataException(
                         "V5c stop identity reused with altered reason.");
-                tx.Commit();
-                return V5cPlan(jobId, V5cRecoveryDisposition.AlreadyStopped,
-                    "previously-stopped");
+                alreadyStopped = true;
             }
+        }
+        if (alreadyStopped)
+        {
+            tx.Commit();
+            return V5cPlan(jobId, V5cRecoveryDisposition.AlreadyStopped,
+                "previously-stopped");
         }
         using (var cmd = _connection.CreateCommand())
         {
