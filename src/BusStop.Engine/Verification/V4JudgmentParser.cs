@@ -124,6 +124,19 @@ public static class V4JudgmentParser
                 entry.GetProperty("explanation").GetString()
                     ?? throw new InvalidDataException("Missing explanation."));
 
+            // The V1 validator remains authoritative. These additional
+            // V4 checks produce actionable, private rejection diagnostics
+            // without relaxing any requirement or repairing model output.
+            if (outcome == ClaimVerificationOutcome.ConfirmedContradiction)
+            {
+                if (judgment.ProblematicText.Length == 0)
+                    throw new InvalidDataException(
+                        "ConfirmedContradiction missing nonempty exact problematicText.");
+                if (judgment.OpposingReferences.Count == 0)
+                    throw new InvalidDataException(
+                        "ConfirmedContradiction missing opposingReferences (authorized referenceId required).");
+            }
+
             EvidenceVerificationValidator.ValidateJudgment(
                 judgment, package.Packet, package.Claim, job, observed, package.HostScope);
             ValidateLaneAuthority(judgment, package);
