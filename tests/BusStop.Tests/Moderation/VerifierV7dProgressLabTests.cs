@@ -78,8 +78,8 @@ public sealed class VerifierV7dProgressLabTests
         Assert.Equal(1, score.FalsePositiveCandidates);
         Assert.Equal(0, score.TruePositiveCandidates);
         Assert.Equal(1.0, score.HealthyDisagreementFalseAlarmRate);
-        Assert.Null(score.CandidatePrecision == null ? null :
-            score.CandidateRecall);
+        Assert.Equal(0.0, score.CandidatePrecision);
+        Assert.Null(score.CandidateRecall);
         Assert.False(score.SemanticAccuracyAccepted);
         Assert.False(score.MinimumDevelopmentSampleReached);
     }
