@@ -149,6 +149,11 @@ public sealed partial class ConversationStore
         ArgumentNullException.ThrowIfNull(ownership);
         ArgumentNullException.ThrowIfNull(runtime);
         AssertV5bCanDispatch(ownership);
+        // V5c inspects only after a NEW OS gate has advanced the durable
+        // session epoch. The initial V5b owner may still be writing the job.
+        if (ownership.Epoch < 2)
+            throw new InvalidOperationException(
+                "V5c recovery requires a newer worker epoch, not first-owner in-flight work.");
         if (V5cSessionForJob(jobId) != ownership.Session)
             throw new InvalidOperationException("Cross-session V5c inspection denied.");
 
@@ -204,7 +209,18 @@ public sealed partial class ConversationStore
 
         // Inspect ALL V4 request reservations for the job, including requests
         // that crashed before V5a's attempt-link stage.
-        var attempts = V5cReadCharged(jobId);
+        List<V5cChargedRow> attempts;
+        try
+        {
+            attempts = V5cReadCharged(jobId);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or FormatException
+                               or SqliteException or OverflowException)
+        {
+            return V5cStop(ownership, jobId,
+                V5cRecoveryDisposition.StoppedUnknownAttemptOwner,
+                "invalid-charged-attempt-record");
+        }
         var reserved = attempts.Where(a => a.Status == "Reserved").ToArray();
         if (attempts.Any(a =>
                 a.Status is not ("Reserved" or "Interrupted" or "Completed")) ||
@@ -260,10 +276,8 @@ public sealed partial class ConversationStore
                 "missing-original-packet-for-pending-claim");
 
         if (leftSession == 0 || leftUtterance == 0 || leftVerification == 0)
-            return new V5cRecoveryPlan(jobId,
+            return V5cStop(ownership, jobId,
                 V5cRecoveryDisposition.StoppedNoRemainingBudget,
-                Array.AsReadOnly(pending), Array.Empty<Guid>(),
-                leftSession, leftUtterance, leftVerification,
                 "no-further-inference-budget");
 
         return new V5cRecoveryPlan(jobId,
