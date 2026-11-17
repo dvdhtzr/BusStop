@@ -92,8 +92,8 @@ public static class V7cHumanReview
             !Regex.IsMatch(reviewed.ReviewerAlias,
                 "^[a-zA-Z0-9][a-zA-Z0-9-]*$",
                 RegexOptions.CultureInvariant) ||
-            reviewed.ReviewedAtUtc is not { Offset: var offset } ||
-            offset != TimeSpan.Zero ||
+            reviewed.ReviewedAtUtc is null ||
+            reviewed.ReviewedAtUtc.Value.Offset != TimeSpan.Zero ||
             reviewed.ReviewedAtUtc.Value > DateTimeOffset.UtcNow.AddMinutes(5) ||
             reviewed.Turns is null ||
             reviewed.Turns.Count != audit.Turns.Count ||
