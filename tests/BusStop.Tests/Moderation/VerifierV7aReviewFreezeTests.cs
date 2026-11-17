@@ -148,8 +148,10 @@ public sealed class VerifierV7aReviewFreezeTests
 
         return new V7AcceptanceCriteria(
             V7FreezeContract.ThresholdVersion, "unit-test-model",
-            "test-digest-000001", "verification-prompt-test",
-            "verification-schema-test", "reviewed-scorer-test",
+            new string('a', 64),
+            EvidenceVerifierV4.VerificationPromptVersion,
+            EvidenceVerifierV4.VerificationSchemaVersion,
+            V7FreezeContract.PlannedReviewedScorerVersion,
             2, 1, 1,
             // Unit-test example values only: no owner has frozen a plan.
             0.90m, 0.90m, 0.90m, 0.80m, 0.80m,
@@ -363,6 +365,34 @@ public sealed class VerifierV7aReviewFreezeTests
         Assert.Throws<InvalidDataException>(() =>
             V7ReviewFreezeValidator.Validate(
                 x.Development, x.Holdout, x.Plan, x.Approval));
+    }
+
+    [Fact]
+    public void Model_digest_and_prompts_must_match_exact_pinned_evaluation_contract()
+    {
+        var x = Inputs(criteria: Criteria() with
+        {
+            ModelDigest = "not-a-fully-pinned-sha",
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Prepare(
+                x.Development, x.Holdout, x.Plan));
+
+        x = Inputs(criteria: Criteria() with
+        {
+            VerifierPromptVersion = "modified-prompt",
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Prepare(
+                x.Development, x.Holdout, x.Plan));
+
+        x = Inputs(criteria: Criteria() with
+        {
+            ScorerVersion = V6EvaluationContract.ScorerVersion,
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Prepare(
+                x.Development, x.Holdout, x.Plan));
     }
 
     [Fact]
