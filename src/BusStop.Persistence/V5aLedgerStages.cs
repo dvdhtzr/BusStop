@@ -221,6 +221,9 @@ public sealed partial class ConversationStore
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
         V5aVerifyChargedRequest(tx, checkpoint.Job, requestId, phase);
+        // Never attach an attempt from a superseded owner epoch to a new
+        // checkpoint event, even if the old attempt remains durably charged.
+        V5bAssertAttemptEpoch(tx, checkpoint.Job.SessionId, requestId, ownership);
         if (V5aStageIsSame(tx, jobId, key, payload))
         {
             tx.Commit();
