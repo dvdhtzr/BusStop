@@ -179,6 +179,26 @@ public sealed class VerifierV6bLocalLabTests
     }
 
     [Fact]
+    public void Identical_corpus_case_repeats_have_byte_identical_v4_prompts_and_packet_hashes()
+    {
+        var corpus = Corpus();
+        var model = new StubModel(request =>
+            Reply(request, ClaimVerificationOutcome.ConfirmedContradiction, true));
+        var lab = new V6bLocalModelLab(model);
+        var first = lab.Run(corpus, "stable-one", 1);
+        var second = lab.Run(corpus, "stable-two", 1);
+
+        var a = Assert.Single(first.PrivateAudit.Cases);
+        var b = Assert.Single(second.PrivateAudit.Cases);
+        Assert.Equal(a.Prompt, b.Prompt);
+        Assert.Equal(a.HostValidatedJudgment!.PacketSha256,
+            b.HostValidatedJudgment!.PacketSha256);
+        Assert.Equal(a.RawModelResponse, b.RawModelResponse);
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(0, V6bSafeExporter.Compare(first, second).OutcomeFlipCount);
+    }
+
+    [Fact]
     public void Same_digest_runs_compare_without_exporting_case_level_flips()
     {
         var left = new V6bLocalModelLab(new StubModel(request =>
