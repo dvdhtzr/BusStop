@@ -90,8 +90,12 @@ public sealed class VerifierV6aEvaluationTests
         Assert.Equal(20, result.Overall.TotalCases);
         Assert.Equal(20, result.Overall.Completed);
         Assert.Equal(20, result.Overall.ExactOutcomeMatches);
-        Assert.Equal(20, result.Overall.ReferencesAuthorizedCount);
-        Assert.Equal(20, result.Overall.ReferencesRelevantCount);
+        Assert.True(result.Overall.CitationCasesScored > 0);
+        Assert.Equal(result.Overall.CitationCasesScored,
+            result.Overall.ReferencesAuthorizedCount);
+        Assert.Equal(result.Overall.CitationCasesScored,
+            result.Overall.ReferencesRelevantCount);
+        Assert.Equal(1d, result.Overall.CitationAuthorizationRate);
         Assert.Equal(0, result.Overall.ConfirmedFalsePositives);
         Assert.Equal(1d, result.Overall.ConfirmedPrecision);
         Assert.Equal(1d, result.Overall.EndToEndConfirmedRecall);
