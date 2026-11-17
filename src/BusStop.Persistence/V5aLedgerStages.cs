@@ -239,7 +239,8 @@ public sealed partial class ConversationStore
         tx.Commit();
     }
 
-    public void RecordV5aClaimResult(Guid jobId, VerificationClaimResult result)
+    public void RecordV5aClaimResult(Guid jobId, VerificationClaimResult result,
+        Guid? verificationRequestId = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         var checkpoint = ReadV5aCheckpoint(jobId);
@@ -265,10 +266,27 @@ public sealed partial class ConversationStore
             throw new InvalidDataException(
                 "V5a operational failure cannot contain an epistemic judgment.");
 
+        if (verificationRequestId is { } charged)
+        {
+            if (!checkpoint.AttemptLinks.Any(link =>
+                link.RequestId == charged &&
+                link.Phase == V4AttemptPhase.ClaimVerification &&
+                link.ClaimIds.Contains(claim.ClaimId)))
+                throw new InvalidDataException(
+                    "V5a result is not linked to its exact charged verification claim group.");
+        }
+        else if (!V5aCanRecordWithoutModel(result, claim,
+                     checkpoint.Packets.SingleOrDefault(p =>
+                         p.Content.ClaimId == claim.ClaimId)))
+            throw new InvalidDataException(
+                "Model-dependent V5a result requires a charged verification attempt link.");
+
         var json = V5aJson(result);
+        var eventJson = V5aJson(new V5aResultEnvelope(
+            result, verificationRequestId));
         var key = "result:" + V5aId(result.ClaimId);
         using var tx = _connection.BeginTransaction(deferred: false);
-        if (V5aStageIsSame(tx, jobId, key, json))
+        if (V5aStageIsSame(tx, jobId, key, eventJson))
         {
             tx.Commit();
             return;
@@ -280,15 +298,17 @@ public sealed partial class ConversationStore
             cmd.CommandText = """
                 INSERT INTO verifier_v5a_results
                     (job_id, claim_id, operational_status, packet_id,
-                     result_json, result_sha256, judgment_schema)
+                     attempt_request_id, result_json, result_sha256, judgment_schema)
                 VALUES (@job, @claim, @status, @packet,
-                        @json, @hash, @schema);
+                        @request, @json, @hash, @schema);
                 """;
             cmd.Parameters.AddWithValue("@job", V5aId(jobId));
             cmd.Parameters.AddWithValue("@claim", V5aId(claim.ClaimId));
             cmd.Parameters.AddWithValue("@status", result.Status.ToString());
             cmd.Parameters.AddWithValue("@packet",
                 (object?)result.Judgment?.PacketId.ToString("D") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@request",
+                (object?)verificationRequestId?.ToString("D") ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@json", json);
             cmd.Parameters.AddWithValue("@hash", V5aHash(json));
             cmd.Parameters.AddWithValue("@schema",
@@ -296,7 +316,7 @@ public sealed partial class ConversationStore
             cmd.ExecuteNonQuery();
         }
         V5aAppendEvent(tx, jobId, key,
-            V5aLedgerStage.ClaimResultRecorded, json);
+            V5aLedgerStage.ClaimResultRecorded, eventJson);
         tx.Commit();
     }
 
@@ -341,6 +361,25 @@ public sealed partial class ConversationStore
         tx.Commit();
     }
 
+    private static bool V5aCanRecordWithoutModel(
+        VerificationClaimResult result, ClaimCandidate claim, EvidencePacket? packet)
+    {
+        if (result.Status != VerificationOperationalStatus.Completed)
+            return true; // error, skip, and no-call results remain operational, not truth claims
+
+        if (result.Judgment?.Outcome == ClaimVerificationOutcome.NoMaterialIssue &&
+            claim.RhetoricalMode != ClaimRhetoricalMode.Asserted)
+            return true;
+
+        if (result.Judgment?.Outcome == ClaimVerificationOutcome.InsufficientEvidence &&
+            packet is not null &&
+            (packet.Content.Items.Count == 0 ||
+             packet.Content.Completeness.Status == EvidenceCompletenessStatus.Unknown))
+            return true;
+
+        return false;
+    }
+
     private Utterance V5aCommitted(VerificationJobIdentity job) =>
         GetCommittedUtterances(job.SessionId)
             .SingleOrDefault(u => u.Id == job.UtteranceId)
@@ -354,7 +393,7 @@ public sealed partial class ConversationStore
             ? ClaimCategory.Other : claim.Category;
 
     private void V5aVerifyChargedRequest(
-        SqliteTransaction tx, VerificationJobIdentity job,
+        SqliteTransaction? tx, VerificationJobIdentity job,
         Guid requestId, V4AttemptPhase phase)
     {
         using var cmd = _connection.CreateCommand();
