@@ -49,9 +49,10 @@ public sealed partial class ConversationStore
         cmd.CommandText = """
             SELECT COUNT(*) FROM sqlite_master
             WHERE type='table' AND name IN
-                ('verifier_v5b_schema', 'verifier_v5b_epochs', 'verifier_v5b_releases');
+                ('verifier_v5b_schema', 'verifier_v5b_epochs',
+                 'verifier_v5b_releases', 'verifier_v5b_attempt_epochs');
             """;
-        if ((long)cmd.ExecuteScalar()! != 3)
+        if ((long)cmd.ExecuteScalar()! != 4)
             throw new InvalidDataException(
                 "V5b ownership schema is only partially installed.");
     }
