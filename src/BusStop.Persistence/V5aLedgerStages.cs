@@ -303,6 +303,10 @@ public sealed partial class ConversationStore
         var key = "result:" + V5aId(result.ClaimId);
         using var tx = _connection.BeginTransaction(deferred: false);
         V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
+        // A later owner may inspect an old charged request, but must not
+        // author a NEW judgment against that earlier inference's identity.
+        if (verificationRequestId is { } request)
+            V5bAssertAttemptEpoch(tx, checkpoint.Job.SessionId, request, ownership);
         if (V5aStageIsSame(tx, jobId, key, eventJson))
         {
             tx.Commit();
