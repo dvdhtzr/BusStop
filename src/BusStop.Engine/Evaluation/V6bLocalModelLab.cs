@@ -178,7 +178,10 @@ public sealed class V6bLocalModelLab
             audits.Add(new V6bPrivateCaseAudit(
                 example.CaseId, example.ClaimText,
                 Array.AsReadOnly(example.Evidence.ToArray()),
-                prompt, response?.RawJson, status, diagnosis,
+                prompt,
+                response?.RawJson is { Length: <= V6bLabContract.MaxResponseChars }
+                    ? response.RawJson : null,
+                status, diagnosis,
                 judgment, response?.Generation, charged));
         }
 
