@@ -22,6 +22,11 @@ static int Run(string[] args)
 
         Optional:
           --review <completed-private-human-review.json>
+          --diagnose-only true
+
+        Diagnostic-only requires --db, --session, --coverage ONLY.
+        It prints aggregate-only V5a disposition counts to stdout.
+        No new directories, files, inference or SQLite writes.
 
         Run after a fresh opt-in three-person conversation with
         --verifier-shadow (and optionally --shadow-moderator).
@@ -43,7 +48,7 @@ static int Run(string[] args)
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "--db", "--session", "--coverage",
-            "--private-dir", "--safe-dir", "--review"
+            "--private-dir", "--safe-dir", "--review", "--diagnose-only"
         };
         var opts = new Dictionary<string, string>(StringComparer.Ordinal);
         for (int i = 0; i < args.Length; i += 2)
@@ -56,10 +61,17 @@ static int Run(string[] args)
         string Required(string name) => opts.TryGetValue(name, out var value)
             ? value : throw new ArgumentException("Missing " + name);
 
+        var diagnoseOnly = opts.TryGetValue("--diagnose-only", out var flag);
+        if (diagnoseOnly && flag != "true" ||
+            diagnoseOnly && opts.ContainsKey("--review"))
+            throw new ArgumentException(
+                "Diagnostic-only must be exactly true and cannot include a human review.");
         var db = Path.GetFullPath(Required("--db"));
         var coverage = Path.GetFullPath(Required("--coverage"));
-        var privateDir = Path.GetFullPath(Required("--private-dir"));
-        var safeDir = Path.GetFullPath(Required("--safe-dir"));
+        var privateDir = diagnoseOnly
+            ? "" : Path.GetFullPath(Required("--private-dir"));
+        var safeDir = diagnoseOnly
+            ? "" : Path.GetFullPath(Required("--safe-dir"));
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -73,11 +85,13 @@ static int Run(string[] args)
             item.Equals(directory, comparison) ||
             item.StartsWith(directory + Path.DirectorySeparatorChar, comparison);
 
-        if (Within(privateDir, safeDir) || Within(safeDir, privateDir))
+        if (!diagnoseOnly &&
+            (Within(privateDir, safeDir) || Within(safeDir, privateDir)))
             throw new InvalidDataException(
                 "V7c private and safe output directories must be disjoint.");
         var repo = Path.GetFullPath(Directory.GetCurrentDirectory());
-        if (File.Exists(Path.Combine(repo, "BusStop.sln")) &&
+        if (!diagnoseOnly &&
+            File.Exists(Path.Combine(repo, "BusStop.sln")) &&
             (Within(privateDir, repo) || Within(safeDir, repo)))
             throw new InvalidDataException(
                 "V7c review and outputs must be OUTSIDE the repository.");
@@ -103,6 +117,14 @@ static int Run(string[] args)
         // No InitializeSchema / no migrations / no writes.
         using var store = ConversationStore.OpenReadOnly(db);
         var audit = V7cNaturalSessionAuditor.Audit(store, session, envelope);
+        if (diagnoseOnly)
+        {
+            // A single aggregate written to stdout. No output folder or file.
+            var disposition = V7cDispositionAnalyzer.Analyze(
+                store, session, audit);
+            Console.WriteLine(JsonSerializer.Serialize(disposition.Safe, json));
+            return disposition.Safe.LedgerAndTranscriptCrossChecked ? 0 : 2;
+        }
         var safe = V7cNaturalSessionAuditor.ExportSafe(audit);
         var worksheet = V7cHumanReview.CreateBlankWorksheet(audit);
 
