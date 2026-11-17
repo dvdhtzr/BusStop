@@ -251,6 +251,17 @@ public sealed class VerifierV6aEvaluationTests
                 "\"referenceId\": \"src-1\"",
                 "\"referenceId\": \"forged-authorization\"",
                 StringComparison.Ordinal)));
+        Assert.Throws<InvalidDataException>(() =>
+            V6CorpusReader.LoadProvisionalSynthetic(raw.Replace(
+                "\"caseId\": \"source-exact-contradiction\"",
+                "\"caseId\": \"source-exact-contradiction\", " +
+                "\"caseId\": \"duplicate-field\"",
+                StringComparison.Ordinal)));
+        Assert.Throws<InvalidDataException>(() =>
+            V6CorpusReader.LoadProvisionalSynthetic(raw.Replace(
+                "\"expectedOutcome\": \"ConfirmedContradiction\",",
+                "",
+                StringComparison.Ordinal)));
     }
 
     [Fact]
