@@ -73,6 +73,14 @@ The subsequent *diagnostic-only* PR update adds bounded, private `V4AttemptDiagn
 
 **Re-run both gates from the updated PR head.** If Gate 2 is still RED, capture the printed `source-fact: attempt ... reason=...` lines. Do **not** change the verifier's outcomes, evidence scope, retry ceiling, or charge accounting merely to force GREEN. Resolve the identified root cause in a separately reviewable update, then re-run. Owner semantic review remains required even after technical GREEN.
 
+### Follow-up on diagnostic rerun — source-fact root cause
+
+After the diagnostic-only update, local Windows Release build and isolated probe build passed, but **one of 170 model-free tests failed** because the test asserted the base string `JsonException` while the actual reported subclass was `JsonReaderException`. The source-fact Ollama result still failed after both charged attempts; **both** returned `ConfirmedContradiction` without satisfying V1's required nonempty `problematicText` **and** nonempty cited `opposingReferences` contract. The host correctly rejected both. Unanchored autobiography stayed `InsufficientEvidence`; dialogue-attribution completed.
+
+This update corrects only that brittle diagnostic test and improves **versioned** prompt instructions (now `claim-verification-prompt-v4-2`): verbatim claim span, exact citation `referenceId` from the corresponding packet, or explicitly choose `InsufficientEvidence` when those cannot be supplied. Separate V4 parser checks distinguish missing span from missing citation before applying unchanged V1 validation. Two new model-free negative tests ensure neither requirement can be bypassed. Retry count, shared session budget, strict citation authority and all other outcomes are unchanged.
+
+Owner must fetch new HEAD, repeat build + full xUnit (expected 172 tests), then repeat the pinned local Ollama probe. Technical RED remains a merge blocker; repeated unreliable citation formatting is not permission to invent citations or change outcome semantics.
+
 ## Merge gate
 
 **No merge, no V5 implementation and no claims of local/Ollama GREEN by the GitHub authoring environment.** Require owner-reported model-free GREEN plus isolated Ollama acceptance evidence, review any failures, then explicit PR merge authorization. If Ollama semantic performance is unsatisfactory, V4 stays isolated and reports the deficiency rather than granting enforcement.
