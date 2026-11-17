@@ -37,6 +37,7 @@ public sealed record V7ReviewedCaseScore(
     bool? OracleOutcomeMatch,
     bool? CitedReferencesAuthorized,
     bool? CitedReferencesRelevant,
+    bool ReferenceScoringApplicable,
     bool? MaterialSpanValid,
     bool? VerdictShapeValid,
     int ChargedLocalModelCalls,
@@ -101,7 +102,7 @@ public sealed record V7ReviewedLane(
     public decimal? CitationRelevanceRate => Ratio(
         RelevantCitationCases, ReferenceScoringCases);
     public decimal? UnscorableRate => Ratio(
-        IndependentCases - OracleCompleted, IndependentCases);
+        ExpectedExtractedCases - OracleCompleted, ExpectedExtractedCases);
 }
 
 /// <summary>
@@ -212,7 +213,7 @@ public static class V7ReviewedScorer
                     example.RhetoricalMode, example.ShouldExtractClaim,
                     example.ReviewedOutcome, false, false, false, false,
                     false, VerificationOperationalStatus.NotStarted,
-                    null, null, null, null, null, null, 0, 0));
+                    null, null, null, false, null, null, 0, 0));
                 continue;
             }
 
@@ -247,8 +248,15 @@ public static class V7ReviewedScorer
                 obs.Status, obs.Outcome,
                 obs.Outcome.HasValue
                     ? obs.Outcome == example.ReviewedOutcome : null,
-                citedAuthorized, citedRelevant, materialSpanValid,
-                verdictShape, obs.ChargedLocalModelCalls,
+                citedAuthorized, citedRelevant,
+                example.ReviewedOutcome is
+                    ClaimVerificationOutcome.ConfirmedContradiction or
+                    ClaimVerificationOutcome.ConflictingEvidence ||
+                    example.SupportingReferences.Count > 0 ||
+                    example.OpposingReferences.Count > 0 ||
+                    obs.SupportingReferences.Count > 0 ||
+                    obs.OpposingReferences.Count > 0,
+                materialSpanValid, verdictShape, obs.ChargedLocalModelCalls,
                 obs.InferenceMilliseconds));
         }
 
@@ -377,14 +385,7 @@ public static class V7ReviewedScorer
         var complete = rows.Where(x =>
             x.Status == VerificationOperationalStatus.Completed).ToArray();
         var references = complete.Where(x =>
-            x.ExpectedOutcome is ClaimVerificationOutcome.ConfirmedContradiction or
-                ClaimVerificationOutcome.ConflictingEvidence ||
-            x.Outcome is ClaimVerificationOutcome.ConfirmedContradiction or
-                ClaimVerificationOutcome.ConflictingEvidence ||
-            // NoMaterialIssue with positive reviewed support is also a
-            // meaningful citation task, not necessarily a no-citation case.
-            x.CitedReferencesRelevant is true &&
-                x.CitedReferencesAuthorized is true).ToArray();
+            x.ReferenceScoringApplicable).ToArray();
         return new V7ReviewedLane(
             lane, rows.Length, rows.Count(x => x.Observed),
             rows.Count(x => x.ShouldExtract),
@@ -395,7 +396,8 @@ public static class V7ReviewedScorer
             rows.Count(x => x.ShouldExtract && x.RhetoricalModeCorrect),
             complete.Length,
             rows.Count(x => x.Observed && x.ShouldExtract &&
-                x.Status != VerificationOperationalStatus.Completed),
+                x.Status is not (VerificationOperationalStatus.NotStarted or
+                    VerificationOperationalStatus.Completed)),
             complete.Count(x => x.OracleOutcomeMatch == true),
             rows.Count(x => x.ExpectedOutcome ==
                 ClaimVerificationOutcome.ConfirmedContradiction),
