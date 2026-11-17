@@ -149,6 +149,29 @@ public sealed record V7FreezeReceipt(
     bool EnforcementAuthorized,
     string Limitations);
 
+/// <summary>
+/// Approved private evaluation input. Only the V7a exact-byte validation
+/// can create it: no public constructor or mutable collections are exposed.
+/// An owner attestation is still NOT an independently verified signature.
+/// </summary>
+public sealed class V7ApprovedEvaluationInputs
+{
+    internal V7ApprovedEvaluationInputs(
+        V7ReviewedCorpus development, V7ReviewedCorpus holdout,
+        V7AcceptanceCriteria criteria, V7FreezeReceipt receipt)
+    {
+        Development = development;
+        Holdout = holdout;
+        Criteria = criteria;
+        Receipt = receipt;
+    }
+
+    public V7ReviewedCorpus Development { get; }
+    public V7ReviewedCorpus Holdout { get; }
+    public V7AcceptanceCriteria Criteria { get; }
+    public V7FreezeReceipt Receipt { get; }
+}
+
 public static class V7ReviewFreezeValidator
 {
     private static readonly JsonSerializerOptions Options = new()
@@ -268,6 +291,55 @@ public static class V7ReviewFreezeValidator
             "The approval is a human attestation, not cryptographic proof of " +
             "independent review or holdout secrecy. No holdout run, statistical " +
             "acceptance, natural conversation or crash/latency gate occurred.");
+    }
+
+    /// <summary>
+    /// Creates a scoped, deep-read-only view only AFTER all four private file
+    /// inputs passed V7a's exact SHA/attestation review. No holdout is exported.
+    /// Never call this with data acquired from a public model or GitHub.
+    /// </summary>
+    public static V7ApprovedEvaluationInputs OpenApproved(
+        string developmentJson, string holdoutJson, string criteriaJson,
+        string ownerApprovalJson)
+    {
+        var receipt = Validate(
+            developmentJson, holdoutJson, criteriaJson, ownerApprovalJson);
+        static V7ReviewedCorpus Freeze(V7ReviewedCorpus original) =>
+            original with
+            {
+                Cases = Array.AsReadOnly(original.Cases.Select(c => c with
+                {
+                    Evidence = Array.AsReadOnly(c.Evidence.ToArray()),
+                    SupportingReferences = Array.AsReadOnly(
+                        c.SupportingReferences.ToArray()),
+                    OpposingReferences = Array.AsReadOnly(
+                        c.OpposingReferences.ToArray())
+                }).ToArray())
+            };
+        var development = Freeze(Read<V7ReviewedCorpus>(developmentJson,
+            "version", "labelStatus", "partition", "reviewMethod",
+            "sourceDeclaration", "cases"));
+        var holdout = Freeze(Read<V7ReviewedCorpus>(holdoutJson,
+            "version", "labelStatus", "partition", "reviewMethod",
+            "sourceDeclaration", "cases"));
+        var originalCriteria = Read<V7AcceptanceCriteria>(criteriaJson,
+            "version", "modelName", "modelDigest", "verifierPromptVersion",
+            "verificationSchemaVersion", "scorerVersion",
+            "minimumIdenticalInputRuns", "minimumNaturalSessions",
+            "minimumCrashScenarios", "minimumClaimSpanPrecision",
+            "minimumClaimSpanRecall", "minimumRhetoricalModeAccuracy",
+            "minimumInsufficientEvidenceRecall", "minimumConflictingEvidenceRecall",
+            "maximumUnscorableRate", "maximumQueueDropRate",
+            "maximumTechnicalFailureRate", "maximumVerifierP95LatencyMilliseconds",
+            "maximumParticipantLatencyRegressionFraction",
+            "lanes", "hardGates", "humanQualityReviewProcedure",
+            "thresholdRationale");
+        var criteria = originalCriteria with
+        {
+            Lanes = Array.AsReadOnly(originalCriteria.Lanes.ToArray())
+        };
+        return new V7ApprovedEvaluationInputs(development, holdout,
+            criteria, receipt);
     }
 
     private static void ValidateCorpus(
