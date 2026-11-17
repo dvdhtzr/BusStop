@@ -400,6 +400,15 @@ public sealed class VerifierV5bOwnershipTests
             ModerationAttemptStatus.Completed);
         Assert.Equal(1, f.Db.GetV4AttemptCounts(job).SessionSharedAttempts);
 
+        // The old public M1 reservation API must not be a way to bypass
+        // verifier phase/epoch stamping even when M1 is enabled.
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.ReserveModeratorAttempt(f.Session.Id, Guid.NewGuid(),
+                job.OpportunityId,
+                ModerationInferencePurpose.VerifierClaimVerification,
+                DateTimeOffset.UtcNow));
+        Assert.Equal(1, f.Db.GetV4AttemptCounts(job).SessionSharedAttempts);
+
         Assert.True(f.Db.TryReserveV4Attempt(
             job, Guid.NewGuid(), V4AttemptPhase.ClaimVerification, lease));
         Assert.Equal(2, f.Db.GetV4AttemptCounts(job).SessionSharedAttempts);
