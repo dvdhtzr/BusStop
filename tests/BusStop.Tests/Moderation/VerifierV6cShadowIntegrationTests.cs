@@ -15,6 +15,11 @@ namespace BusStop.Tests.Moderation;
 
 public sealed class VerifierV6cShadowIntegrationTests
 {
+    private sealed class AlwaysAcceptShadowSink : IShadowModerationSink
+    {
+        public bool TryObserve(ShadowObservation observation) => true;
+    }
+
     private sealed class TestModel : IModelClient
     {
         public string ModelName => "synthetic-v6c-model";
@@ -41,7 +46,8 @@ public sealed class VerifierV6cShadowIntegrationTests
         public Briefing Briefing { get; }
         public TestModel Model { get; } = new();
         public V4SessionPolicy Policy { get; }
-        public Fixture(bool optIn = true, int sharedBudget = 8)
+        public Fixture(bool optIn = true, int sharedBudget = 8,
+            bool m1Shadow = false)
         {
             Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
                 "busstop-v6c-" + Guid.NewGuid().ToString("N") + ".db");
@@ -62,7 +68,18 @@ public sealed class VerifierV6cShadowIntegrationTests
                 SessionMode.FreshEncounter, Briefing.Id,
                 "floor-2", "synthetic-v6c", "test-context",
                 SessionStatus.Active, DateTimeOffset.UtcNow, null);
-            Store.CreateSession(Session);
+            ModerationSessionPolicy? moderator = null;
+            if (m1Shadow)
+                moderator = ModerationSessionPolicy.Disabled with
+                {
+                    Mode = ModerationOperatingMode.Shadow,
+                    RuleVersion = "m1-rules-test",
+                    PromptVersion = "m1-prompt-test",
+                    ModelName = "m1-test", ModelDigest = "m1-test-digest",
+                    Temperature = 0.1, Think = false,
+                    MaxModeratorCalls = 8, ShadowSampleEvery = 1
+                };
+            Store.CreateSession(Session, moderator);
             Policy = new V4SessionPolicy(
                 EvidenceVerifierV4.ContractVersion, VerificationOperatingMode.Shadow,
                 V3ClaimDetector.RuleVersion, V3ModelClaimExtractor.PromptVersion,
@@ -189,6 +206,24 @@ public sealed class VerifierV6cShadowIntegrationTests
             new[] { f.First, f.Second }, f.Briefing,
             verifierShadowSink: f.Worker());
         Assert.NotNull(engine);
+        Assert.Equal(0, f.Model.Calls);
+    }
+
+    [Fact]
+    public void Independent_m1_and_v6c_observers_can_coexist_without_m1_replacement()
+    {
+        using var f = new Fixture(m1Shadow: true);
+        var verifier = f.Worker();
+        var engine = new ConversationEngine(f.Store, f.Model,
+            new ParticipantContextBuilder(), f.Session.Id,
+            new[] { f.First, f.Second }, f.Briefing,
+            shadowSink: new AlwaysAcceptShadowSink(),
+            verifierShadowSink: verifier);
+        Assert.NotNull(engine);
+        Assert.Equal(ModerationOperatingMode.Shadow,
+            f.Store.GetModerationPolicy(f.Session.Id).Mode);
+        Assert.Equal(VerificationOperatingMode.Shadow,
+            f.Store.GetV4VerifierPolicy(f.Session.Id)!.Mode);
         Assert.Equal(0, f.Model.Calls);
     }
 
