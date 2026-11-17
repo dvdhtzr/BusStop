@@ -202,6 +202,26 @@ public sealed class VerifierV5cRecoveryTests
         var stopped = f.Db.GetV5cStop(job.JobId);
         Assert.NotNull(stopped);
         Assert.Equal(successor.Epoch, stopped.OwnerEpoch);
+        using (var reopened = ConversationStore.OpenFile(f.Path))
+        {
+            reopened.InitializeSchema();
+            Assert.Equal(stopped, reopened.GetV5cStop(job.JobId));
+            Assert.Single(reopened.GetCommittedUtterances(job.SessionId));
+        }
+        using (var sql = new SqliteConnection($"Data Source={f.Path}"))
+        {
+            sql.Open();
+            foreach (var statement in new[]
+            {
+                "UPDATE verifier_v5c_stops SET reason_code='forged';",
+                "DELETE FROM verifier_v5c_stops;"
+            })
+            {
+                using var command = sql.CreateCommand();
+                command.CommandText = statement;
+                Assert.Throws<SqliteException>(() => command.ExecuteNonQuery());
+            }
+        }
         Assert.Single(f.Db.ReadV5aCheckpoint(job.JobId).Events);
         Assert.Throws<InvalidOperationException>(() =>
             f.Db.SealV5aClaims(job.JobId, Array.Empty<ClaimCandidate>(), successor));
