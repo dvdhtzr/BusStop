@@ -16,6 +16,8 @@ public sealed partial class ConversationStore
         string PayloadSha256, string? PreviousSha256);
     private sealed record V5aPacketEnvelope(
         Guid PacketId, Guid ClaimId, string PacketSha256);
+    private sealed record V5aResultEnvelope(
+        VerificationClaimResult Result, Guid? VerificationRequestId);
 
     private static string V5aJson<T>(T value) => JsonSerializer.Serialize(value);
 
@@ -322,11 +324,15 @@ public sealed partial class ConversationStore
             }
         }
 
+        foreach (var link in links)
+            V5aVerifyChargedRequest(null, job, link.RequestId, link.Phase);
+
         var results = new List<VerificationClaimResult>();
+        var resultLinks = new List<V5aClaimResultLink>();
         using (var cmd = _connection.CreateCommand())
         {
             cmd.CommandText = """
-                SELECT claim_id, operational_status, packet_id,
+                SELECT claim_id, operational_status, packet_id, attempt_request_id,
                        result_json, result_sha256, judgment_schema
                 FROM verifier_v5a_results WHERE job_id=@job ORDER BY claim_id;
                 """;
@@ -334,9 +340,11 @@ public sealed partial class ConversationStore
             using var rows = cmd.ExecuteReader();
             while (rows.Read())
             {
-                var json = rows.GetString(3);
-                if (V5aHash(json) != rows.GetString(4) ||
-                    rows.GetString(5) != policy.VerificationSchemaVersion)
+                var json = rows.GetString(4);
+                var attemptRequestId = rows.IsDBNull(3)
+                    ? (Guid?)null : Guid.Parse(rows.GetString(3));
+                if (V5aHash(json) != rows.GetString(5) ||
+                    rows.GetString(6) != policy.VerificationSchemaVersion)
                     throw new InvalidDataException("V5a claim-result hash or schema mismatch.");
                 var result = JsonSerializer.Deserialize<VerificationClaimResult>(json)
                     ?? throw new InvalidDataException("V5a claim result is absent.");
@@ -362,7 +370,24 @@ public sealed partial class ConversationStore
                 }
                 else if (result.FailureDetail is { Length: > 512 })
                     throw new InvalidDataException("V5a result error detail is too long.");
+                var resultClaim = claims.Single(c => c.ClaimId == result.ClaimId);
+                var resultPacket = packets.SingleOrDefault(p =>
+                    p.Content.ClaimId == result.ClaimId);
+                if (attemptRequestId is { } requestId)
+                {
+                    var link = links.SingleOrDefault(x =>
+                        x.RequestId == requestId &&
+                        x.Phase == V4AttemptPhase.ClaimVerification &&
+                        x.ClaimIds.Contains(result.ClaimId));
+                    if (link is null)
+                        throw new InvalidDataException(
+                            "V5a claim result refers to a foreign or unlinked inference attempt.");
+                }
+                else if (!V5aCanRecordWithoutModel(result, resultClaim, resultPacket))
+                    throw new InvalidDataException(
+                        "V5a model-backed claim result lacks a charged attempt link.");
                 results.Add(result);
+                resultLinks.Add(new V5aClaimResultLink(result.ClaimId, attemptRequestId));
             }
         }
 
@@ -389,14 +414,18 @@ public sealed partial class ConversationStore
         }
 
         V5aValidateStageAndRelations(events, claims, packets,
-            links, results, summary, sealedClaims, sealedPackets, sealedSummary);
+            links, results, resultLinks, summary,
+            sealedClaims, sealedPackets, sealedSummary);
         return new V5aLedgerCheckpoint(job, evaluation, policy, policySha,
             Array.AsReadOnly(events.ToArray()),
             Array.AsReadOnly(claims.ToArray()),
             Array.AsReadOnly(packets.ToArray()),
             Array.AsReadOnly(links.ToArray()),
             Array.AsReadOnly(results.ToArray()),
-            summary);
+            summary)
+        {
+            ResultLinks = Array.AsReadOnly(resultLinks.ToArray())
+        };
     }
 
     private static VerificationEvidenceScope V5aFrozenScope(
@@ -449,6 +478,7 @@ public sealed partial class ConversationStore
         IReadOnlyList<EvidencePacket> packets,
         IReadOnlyList<V5aAttemptLink> links,
         IReadOnlyList<VerificationClaimResult> results,
+        IReadOnlyList<V5aClaimResultLink> resultLinks,
         VerificationObservationSummary? summary,
         V5aLedgerEvent? claimsEvent, V5aLedgerEvent? packetsEvent,
         V5aLedgerEvent? summaryEvent)
@@ -505,12 +535,17 @@ public sealed partial class ConversationStore
                     linksSeen++;
                     break;
                 case V5aLedgerStage.ClaimResultRecorded:
-                    var result = JsonSerializer.Deserialize<VerificationClaimResult>(e.PayloadJson)
+                    var resultEnvelope = JsonSerializer.Deserialize<V5aResultEnvelope>(e.PayloadJson)
                         ?? throw new InvalidDataException("Missing V5a claim-result event.");
-                    if (packetsEvent is null || e.Sequence <= packetsEvent.Sequence ||
+                    var result = resultEnvelope.Result;
+                    if (result is null ||
+                        packetsEvent is null || e.Sequence <= packetsEvent.Sequence ||
                         e.EventKey != "result:" + V5aId(result.ClaimId) ||
                         !resultsById.TryGetValue(result.ClaimId, out var storedResult) ||
-                        e.PayloadJson != V5aJson(storedResult))
+                        !resultLinks.Any(link =>
+                            link.ClaimId == result.ClaimId &&
+                            link.VerificationRequestId == resultEnvelope.VerificationRequestId) ||
+                        V5aJson(storedResult) != V5aJson(result))
                         throw new InvalidDataException("V5a claim-result event/row mismatch.");
                     resultsSeen++;
                     break;
@@ -523,6 +558,7 @@ public sealed partial class ConversationStore
         }
 
         if (linksSeen != links.Count || resultsSeen != results.Count ||
+            resultLinks.Count != results.Count ||
             (summary is not null && (summary.IdentifiedClaims != claims.Count ||
                 summary.VerifiedClaims != results.Count(r =>
                     r.Status == VerificationOperationalStatus.Completed) ||
