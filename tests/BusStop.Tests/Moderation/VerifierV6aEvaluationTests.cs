@@ -64,6 +64,21 @@ public sealed class VerifierV6aEvaluationTests
     }
 
     [Fact]
+    public void Corpus_hash_cannot_be_invalidated_by_mutating_loaded_collection_lists()
+    {
+        var f = Fixture();
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<V6LabeledCase>)f.Document.Cases).Clear());
+        var first = f.Document.Cases[0];
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<string>)first.ExpectedOpposingRefs).Clear());
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<V6SyntheticEvidence>)first.Evidence).Clear());
+        Assert.Equal(64, f.Sha256.Length);
+        Assert.Equal(20, f.Document.Cases.Count);
+    }
+
+    [Fact]
     public void Perfectly_matching_fake_observations_are_still_not_accepted_ground_truth()
     {
         var f = Fixture();
