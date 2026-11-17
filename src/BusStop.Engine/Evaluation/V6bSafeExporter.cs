@@ -20,6 +20,9 @@ public sealed record V6bSafeRunSummary(
     string V4SchemaVersion,
     string ScorerVersion,
     bool AcceptanceAllowed,
+    int HostEvidenceScopeRejections,
+    int StructuredVerdictRejections,
+    int TruncatedResponses,
     V6LaneScore Overall,
     IReadOnlyList<V6LaneScore> ByCategory,
     IReadOnlyList<V6LaneScore> ByRhetoricalMode,
@@ -60,7 +63,11 @@ public static class V6bSafeExporter
             score.CorpusSha256, score.LabelStatus, score.Partition,
             score.RunId, audit.ModelName, audit.ModelDigest,
             audit.V4PromptVersion, audit.V4SchemaVersion, audit.ScorerVersion,
-            false, score.Overall, score.ByCategory, score.ByRhetoricalMode,
+            false,
+            audit.Cases.Count(c => c.DiagnosticCode == "v4-evidence-scope-rejection"),
+            audit.Cases.Count(c => c.DiagnosticCode == "v4-structural-rejection"),
+            audit.Cases.Count(c => c.DiagnosticCode == "generation-truncated"),
+            score.Overall, score.ByCategory, score.ByRhetoricalMode,
             score.ByScenarioGroup, score.ConfusionMatrix,
             "Synthetic provisional DEVELOPMENT metrics only; case-level audits stay private. " +
             "This does not estimate live selection coverage or certify semantic readiness.");
