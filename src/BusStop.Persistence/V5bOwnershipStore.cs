@@ -219,6 +219,74 @@ public sealed partial class ConversationStore
     }
 
     /// <summary>
+    /// Bind the charged V4 request to the EPOCH that actually reserved it.
+    /// Call AFTER inserting the V4 phase and BEFORE committing that SAME
+    /// SQLite reservation transaction. Legacy/unfenced sessions add no row.
+    /// </summary>
+    private void V5bStampAttempt(
+        SqliteTransaction tx, SessionId session, Guid requestId,
+        V5bOwnership? ownership)
+    {
+        var current = V5bLatestEpoch(session, tx);
+        if (current is null)
+        {
+            if (ownership is not null)
+                throw new InvalidOperationException(
+                    "Cannot stamp an unenrolled V5b attempt.");
+            return;
+        }
+        V5bAssertSessionOwner(tx, session, ownership);
+        using var cmd = _connection.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT INTO verifier_v5b_attempt_epochs
+                (request_id, session_id, epoch, owner_id, gate_id)
+            VALUES (@request, @session, @epoch, @owner, @gate);
+            """;
+        cmd.Parameters.AddWithValue("@request", requestId.ToString("D"));
+        cmd.Parameters.AddWithValue("@session", session.ToString());
+        cmd.Parameters.AddWithValue("@epoch", current.Epoch);
+        cmd.Parameters.AddWithValue("@owner", current.OwnerId.ToString("D"));
+        cmd.Parameters.AddWithValue("@gate", current.GateId.ToString("D"));
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// An old request can remain charged/Reserved, but must never be marked
+    /// Completed or newly linked as if dispatched by a new worker epoch.
+    /// V5c will implement a separate explicit recovery classification.
+    /// </summary>
+    private void V5bAssertAttemptEpoch(
+        SqliteTransaction tx, SessionId session, Guid requestId,
+        V5bOwnership? ownership)
+    {
+        var current = V5bLatestEpoch(session, tx);
+        if (current is null)
+        {
+            if (ownership is not null)
+                throw new InvalidOperationException(
+                    "Cannot authorize a V5b attempt for an unenrolled session.");
+            return;
+        }
+        V5bAssertSessionOwner(tx, session, ownership);
+        using var cmd = _connection.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            SELECT epoch, owner_id, gate_id FROM verifier_v5b_attempt_epochs
+            WHERE request_id=@request AND session_id=@session;
+            """;
+        cmd.Parameters.AddWithValue("@request", requestId.ToString("D"));
+        cmd.Parameters.AddWithValue("@session", session.ToString());
+        using var row = cmd.ExecuteReader();
+        if (!row.Read() ||
+            row.GetInt64(0) != current.Epoch ||
+            row.GetString(1) != current.OwnerId.ToString("D") ||
+            row.GetString(2) != current.GateId.ToString("D"))
+            throw new InvalidOperationException(
+                "Charged V4 request belongs to another or abandoned V5b worker epoch.");
+    }
+
+    /// <summary>
     /// Only V4 extraction/verification requests are fenced. M1 uses its
     /// original APIs and is not governed by this experimental worker contract.
     /// </summary>
@@ -237,7 +305,10 @@ public sealed partial class ConversationStore
         var purpose = cmd.ExecuteScalar() as string;
         if (purpose is nameof(ModerationInferencePurpose.VerifierClaimExtraction)
             or nameof(ModerationInferencePurpose.VerifierClaimVerification))
+        {
             V5bAssertSessionOwner(tx, session, ownership);
+            V5bAssertAttemptEpoch(tx, session, requestId, ownership);
+        }
         else if (ownership is not null)
             throw new InvalidOperationException(
                 "V5b capability cannot authorize a non-verifier moderator attempt.");
