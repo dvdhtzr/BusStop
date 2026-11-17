@@ -274,6 +274,10 @@ public sealed partial class ConversationStore
                 link.ClaimIds.Contains(claim.ClaimId)))
                 throw new InvalidDataException(
                     "V5a result is not linked to its exact charged verification claim group.");
+            if (result.Status == VerificationOperationalStatus.Completed &&
+                !V5aChargedRequestCompleted(charged))
+                throw new InvalidDataException(
+                    "V5a completed verdict requires a finalized, charged model request.");
         }
         else if (!V5aCanRecordWithoutModel(result, claim,
                      checkpoint.Packets.SingleOrDefault(p =>
@@ -359,6 +363,18 @@ public sealed partial class ConversationStore
         V5aAppendEvent(tx, jobId, "summary:sealed",
             V5aLedgerStage.SummarySealed, json);
         tx.Commit();
+    }
+
+    private bool V5aChargedRequestCompleted(Guid requestId)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT status FROM moderator_inference_reservations
+            WHERE request_id = @request;
+            """;
+        cmd.Parameters.AddWithValue("@request", V5aId(requestId));
+        return cmd.ExecuteScalar() is string state &&
+            state == ModerationAttemptStatus.Completed.ToString();
     }
 
     private static bool V5aCanRecordWithoutModel(
