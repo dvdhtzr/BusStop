@@ -46,7 +46,7 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
 {
     private sealed record WorkItem(
         UtteranceId Id, OpportunityId Opportunity,
-        CharacterId Speaker, long Boundary);
+        CharacterId Speaker, long Boundary, string CommittedText);
 
     private readonly string _databasePath;
     private readonly SessionId _session;
@@ -126,7 +126,8 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
                 observation.CommittedUtterance,
                 observation.Candidate.Opportunity,
                 observation.Candidate.Speaker,
-                observation.Candidate.CommittedBoundary));
+                observation.Candidate.CommittedBoundary,
+                observation.Candidate.Text));
             return true;
         }
     }
@@ -199,7 +200,9 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
                         ?? throw new InvalidDataException("Committed shadow speech disappeared.");
                     if (speech.Opportunity != item.Opportunity ||
                         speech.Speaker != item.Speaker ||
-                        speech.Sequence - 1 != item.Boundary)
+                        speech.Sequence - 1 != item.Boundary ||
+                        !string.Equals(speech.Text, item.CommittedText,
+                            StringComparison.Ordinal))
                         throw new InvalidDataException("Shadow identity/sequence no longer matches.");
 
                     var job = new VerificationJobIdentity(
