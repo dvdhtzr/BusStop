@@ -24,10 +24,16 @@ public sealed partial class ConversationStore : IDisposable
 
     public void InitializeSchema()
     {
+        // Refuse unknown newer verifier ledger schemas before any migration.
+        // An absent V5a ledger is a normal legacy database and is upgraded
+        // additively. M1/V2/V4 authoritative tables are never rewritten.
+        EnsureV5aLedgerSchemaCompatible();
         Execute(Schema.Ddl);
         EnsureModerationMarkerColumn(); // add-only migration for older SQLite databases
         EnsureShadowSamplingColumn();
         EnsureShadowAttemptColumn();
+        Execute(V5aLedgerSchema.Ddl);
+        EnsureV5aLedgerSchemaCompatible();
     }
 
     // --- writes -------------------------------------------------------------
