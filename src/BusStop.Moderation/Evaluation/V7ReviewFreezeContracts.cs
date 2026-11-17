@@ -46,6 +46,10 @@ public sealed record V7ReviewedCase(
     string ScenarioGroup,
     ClaimCategory Category,
     ClaimRhetoricalMode RhetoricalMode,
+    string UtteranceText,
+    int ClaimStartUtf16,
+    int ClaimLengthUtf16,
+    bool ShouldExtractClaim,
     string ClaimText,
     IReadOnlyList<V7ReviewEvidence> Evidence,
     ClaimVerificationOutcome ReviewedOutcome,
@@ -288,7 +292,16 @@ public static class V7ReviewFreezeValidator
                 !Enum.IsDefined(item.Category) ||
                 !Enum.IsDefined(item.RhetoricalMode) ||
                 !Enum.IsDefined(item.ReviewedOutcome) ||
+                !Valid(item.UtteranceText, 12_000) ||
                 !Valid(item.ClaimText, 4000) ||
+                item.ClaimStartUtf16 < 0 ||
+                item.ClaimLengthUtf16 < 1 ||
+                item.ClaimStartUtf16 > item.UtteranceText.Length ||
+                item.ClaimLengthUtf16 >
+                    item.UtteranceText.Length - item.ClaimStartUtf16 ||
+                !string.Equals(item.UtteranceText.Substring(
+                    item.ClaimStartUtf16, item.ClaimLengthUtf16),
+                    item.ClaimText, StringComparison.Ordinal) ||
                 !Valid(item.ReviewRationale, 3000) ||
                 item.ReviewRationale.Length < 16 ||
                 !ValidId(item.ReviewerId) ||
@@ -300,6 +313,17 @@ public static class V7ReviewFreezeValidator
                 item.OpposingReferences is null)
                 throw new InvalidDataException(
                     "Missing or malformed owner-review record or duplicate case.");
+
+            // Negative extraction examples (jokes, questions, opinions)
+            // remain in the claim-selection denominator; a verifier must not
+            // automatically promote them to material contradictions.
+            if (!item.ShouldExtractClaim &&
+                (item.RhetoricalMode == ClaimRhetoricalMode.Asserted ||
+                 item.ReviewedOutcome != ClaimVerificationOutcome.NoMaterialIssue ||
+                 item.SupportingReferences.Count != 0 ||
+                 item.OpposingReferences.Count != 0))
+                throw new InvalidDataException(
+                    "Negative extraction example cannot be an asserted material verdict.");
 
             var refs = new HashSet<string>(StringComparer.Ordinal);
             foreach (var evidence in item.Evidence)
@@ -493,7 +517,9 @@ public static class V7ReviewFreezeValidator
                 foreach (var item in document.RootElement.GetProperty("cases").EnumerateArray())
                 {
                     ExactFields(item, "caseId", "scenarioGroup", "category",
-                        "rhetoricalMode", "claimText", "evidence", "reviewedOutcome",
+                        "rhetoricalMode", "utteranceText", "claimStartUtf16",
+                        "claimLengthUtf16", "shouldExtractClaim", "claimText",
+                        "evidence", "reviewedOutcome",
                         "supportingReferences", "opposingReferences",
                         "reviewRationale", "reviewerId", "reviewedAtUtc");
                     foreach (var ev in item.GetProperty("evidence").EnumerateArray())
