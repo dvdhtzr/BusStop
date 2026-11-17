@@ -35,7 +35,9 @@ public sealed class VerifierV7aReviewFreezeTests
         IReadOnlyList<string>? supporting = null,
         IReadOnlyList<string>? opposing = null) =>
         new(partition + "-" + id, "synthetic-" + id,
-            category, mode, claim, Array.AsReadOnly(sources.ToArray()),
+            category, mode, claim, 0, claim.Length,
+            mode == ClaimRhetoricalMode.Asserted, claim,
+            Array.AsReadOnly(sources.ToArray()),
             expected, supporting ?? Array.Empty<string>(),
             opposing ?? Array.Empty<string>(),
             "Human reviewer must independently inspect every fictional source before approval.",
@@ -468,6 +470,65 @@ public sealed class VerifierV7aReviewFreezeTests
         Assert.Throws<InvalidDataException>(() =>
             V7ReviewFreezeValidator.Validate(
                 x.Development, x.Holdout, x.Plan, x.Approval));
+    }
+
+    [Fact]
+    public void Claim_extraction_annotations_must_match_exact_committed_utf16_span()
+    {
+        var development = Corpus(V7Partition.Development);
+        var cases = development.Cases.ToArray();
+        cases[0] = cases[0] with
+        {
+            UtteranceText = "Arthur: " + cases[0].ClaimText,
+            ClaimStartUtf16 = 8
+        };
+        var valid = development with { Cases = Array.AsReadOnly(cases) };
+        var inputs = Inputs(development: valid);
+        var preparation = V7ReviewFreezeValidator.Prepare(
+            inputs.Development, inputs.Holdout, inputs.Plan);
+        Assert.Equal(8, preparation.DevelopmentCases);
+
+        cases[0] = cases[0] with { ClaimStartUtf16 = 7 };
+        inputs = Inputs(development: development with
+        {
+            Cases = Array.AsReadOnly(cases)
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Prepare(
+                inputs.Development, inputs.Holdout, inputs.Plan));
+
+        cases = development.Cases.ToArray();
+        cases[0] = cases[0] with { ClaimLengthUtf16 = -1 };
+        inputs = Inputs(development: development with
+        {
+            Cases = Array.AsReadOnly(cases)
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Prepare(
+                inputs.Development, inputs.Holdout, inputs.Plan));
+    }
+
+    [Fact]
+    public void Rhetorical_nonselection_cannot_become_a_confirmed_contradiction()
+    {
+        var development = Corpus(V7Partition.Development);
+        var cases = development.Cases.ToArray();
+        var rhetorical = Array.FindIndex(cases,
+            c => c.RhetoricalMode == ClaimRhetoricalMode.Question);
+        Assert.True(rhetorical >= 0);
+        cases[rhetorical] = cases[rhetorical] with
+        {
+            ShouldExtractClaim = false,
+            ReviewedOutcome = ClaimVerificationOutcome.ConfirmedContradiction,
+            OpposingReferences = new[] { "src-1" }
+        };
+        var x = Inputs(development: development with
+        {
+            Cases = Array.AsReadOnly(cases)
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Prepare(
+                x.Development, x.Holdout, x.Plan));
     }
 
     [Fact]
