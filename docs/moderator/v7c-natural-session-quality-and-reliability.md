@@ -45,7 +45,7 @@ if ($LASTEXITCODE -ne 0) { throw 'V7a freeze CLI build FAILED' }
 Write-Host 'V7c MODEL-FREE LOCAL GREEN' -ForegroundColor Green
 ~~~
 
-The 13 VerifierV7cNaturalSessionAuditTests run real disposable SQLite with three personas and a scripted local model (no Ollama). They test ledger/transcript consistency, read-only SQLite, queue overflow, transcript hash mismatches, an immutable V5a trigger that correctly rejects direct modification, and a separate offline-corruption scenario in which the update trigger is removed **only in a disposable test database** so the hash-chain validator must reject modified bytes. Also covered: nonterminal registration requiring explicit V5c recovery, private-versus-safe exports, and blank/complete human review. No production trigger or schema is weakened.
+The 16 VerifierV7cNaturalSessionAuditTests run real disposable SQLite with three personas and a scripted local model (no Ollama). They test ledger/transcript consistency, read-only SQLite, queue overflow, transcript hash mismatches, an immutable V5a trigger that correctly rejects direct modification, and a separate offline-corruption scenario in which the update trigger is removed **only in a disposable test database** so the hash-chain validator must reject modified bytes. Also covered: nonterminal registration requiring explicit V5c recovery, private-versus-safe exports, and blank/complete human review. No production trigger or schema is weakened.
 
 ## Owner-local NATURAL Ollama experiment (additional gate, not default tests)
 
@@ -78,6 +78,34 @@ Write-Host "Private V7c results: $out"
 ~~~
 
 The first run samples every second committed utterance and holds up to 32 selected items. The actual selected count depends on successful SPEAK commits. The V7c audit's exit 0 means observed mechanical consistency only; it does not assert all speech was verified or any human semantic criterion passed.
+
+## Re-examine an existing natural run without creating artifacts
+
+Before another long experiment, use the original SQLite session and private V6c coverage file to classify the existing ledger. The `--diagnose-only true` mode is strictly read-only: it prints one aggregate JSON object directly to PowerShell and **creates no directories, worksheet, database, or report files**. No Ollama call is dispatched. Do not redirect the output into the repository.
+
+~~~powershell
+$runs = Get-ChildItem $env:TEMP -Directory -Filter 'BusStop-V7c-Natural-*' |
+    Sort-Object LastWriteTime -Descending
+$selectedRun = $runs | Select-Object -First 1
+if ($null -eq $selectedRun) { throw 'No existing V7c natural run found' }
+$db = Join-Path $selectedRun.FullName 'session.sqlite'
+$cov = Get-ChildItem (Join-Path $selectedRun.FullName 'v6c-private') -Filter 'v6c-coverage-*.private.json' |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($null -eq $cov) { throw 'Private V6c coverage is missing' }
+$sessionId = [string](Get-Content -Raw $cov.FullName | ConvertFrom-Json).session
+
+dotnet run --project .\tests\BusStop.V7.NaturalAudit\BusStop.V7.NaturalAudit.csproj -c Release -- `
+    --db $db --session $sessionId --coverage $cov.FullName --diagnose-only true
+if ($LASTEXITCODE -ne 0) { throw 'Existing-run disposition audit FAILED' }
+~~~
+
+The aggregate separates terminal `Complete` / `Partial` / `Incomplete`, nonterminal registrations, no extracted claims, protected or Other claims, missing eligible packet evidence, dispatch-eligible but uncharged jobs requiring investigation, and actual charged V4 dispatch. It also counts completed epistemic outcomes. The counts are derived exclusively from unchanged V5a checkpoint chains, and must reconcile to the original audit. It prints no utterance text, speaker handles, IDs, full private paths, reviewer notes or claim excerpts. **Do not infer truthful speech from zero dispatch or absent evidence.**
+
+If a natural-run folder was removed or contains multiple sessions, do NOT start a new run just to satisfy the audit. Locate the matching retained SQLite and coverage, or report them missing. No automatic recovery and no hidden creation of temporary outputs.
+
+## Deferred cleanup commitment
+
+After the current V7c observational review and PR gate, inventory experiment directories in `$env:TEMP`, local repo outputs, and older test artifacts. Preserve a manifest, baseline evidence and any frozen owner-review files, then explicitly authorize deletion of proven disposable folders. The V7c diagnostic command does not delete anything. Subsequent runs should use a single owner-approved output root with predictable retention rather than growing timestamped locations indefinitely.
 
 ## Additional natural evaluation conditions
 
