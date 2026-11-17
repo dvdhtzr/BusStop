@@ -344,6 +344,26 @@ public sealed class VerifierV7bReviewedEvaluationTests
     }
 
     [Fact]
+    public void Extra_candidate_beside_exact_match_reduces_extraction_precision()
+    {
+        var frozen = Approved();
+        var item = frozen.Development.Cases[0];
+        var obs = Observation(item.CaseId, 2, true, true, true,
+            VerificationOperationalStatus.Completed,
+            ClaimVerificationOutcome.ConfirmedContradiction,
+            new[] { "src-1" });
+        var result = V7ReviewedScorer.Score(frozen,
+            V7Partition.Development, "over-selection",
+            frozen.Criteria.ModelName, frozen.Criteria.ModelDigest,
+            new[] { obs });
+        Assert.Equal(1, result.Overall.ExactSpanHits);
+        Assert.Equal(1, result.Overall.ExtraDetectedCandidates);
+        Assert.Equal(0.5m, result.Overall.ExtractionPrecision);
+        Assert.Equal(1, result.Overall.OracleContradictionTruePositives);
+        Assert.False(result.SemanticAcceptanceGranted);
+    }
+
+    [Fact]
     public void Local_model_is_not_called_for_protected_case_or_inference_before_explicit_run()
     {
         var model = new ScriptedModel(_ => ModelResponse.TransportError());
