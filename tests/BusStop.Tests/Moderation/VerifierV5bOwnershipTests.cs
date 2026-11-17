@@ -318,6 +318,37 @@ public sealed class VerifierV5bOwnershipTests
     }
 
     [Fact]
+    public void Successor_cannot_create_new_claim_result_using_old_epoch_completed_inference()
+    {
+        using var f = Setup();
+        var (utterance, job) = Register(f);
+        var oldGate = V5bProcessGate.Acquire(f.Path);
+        var old = f.Db.AcquireV5bSession(f.Session.Id, oldGate);
+        var claim = Claim(job, utterance);
+        var packet = Packet(f, job, utterance, claim);
+
+        f.Db.SealV5aClaims(job.JobId, new[] { claim }, old);
+        f.Db.SealV5aPackets(job.JobId, new[] { packet }, old);
+        var request = Guid.NewGuid();
+        Assert.True(f.Db.TryReserveV4Attempt(
+            job, request, V4AttemptPhase.ClaimVerification, old));
+        f.Db.LinkV5aChargedAttempt(job.JobId, request,
+            V4AttemptPhase.ClaimVerification, new[] { claim.ClaimId }, old);
+        f.Db.FinalizeModeratorAttempt(
+            job.SessionId, request, ModerationAttemptStatus.Completed, old);
+
+        oldGate.Dispose(); // model call was completed but result not persisted
+        using var replacementGate = V5bProcessGate.Acquire(f.Path);
+        var current = f.Db.AcquireV5bSession(f.Session.Id, replacementGate);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.RecordV5aClaimResult(
+                job.JobId, CleanResult(claim, packet), request, current));
+        Assert.Empty(f.Db.ReadV5aCheckpoint(job.JobId).ClaimResults);
+        Assert.Equal(1, f.Db.GetV4AttemptCounts(job).SessionSharedAttempts);
+    }
+
+    [Fact]
     public void Requests_reserved_before_v5b_opt_in_cannot_be_promoted_after_fencing()
     {
         using var f = Setup();
