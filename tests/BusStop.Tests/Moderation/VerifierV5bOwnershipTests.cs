@@ -289,6 +289,35 @@ public sealed class VerifierV5bOwnershipTests
     }
 
     [Fact]
+    public void Abandoned_epoch_and_charged_attempt_survive_sqlite_close_and_reopen()
+    {
+        using var f = Setup();
+        var (_, job) = Register(f);
+        var oldGate = V5bProcessGate.Acquire(f.Path);
+        var prior = f.Db.AcquireV5bSession(f.Session.Id, oldGate);
+        var attempt = Guid.NewGuid();
+        Assert.True(f.Db.TryReserveV4Attempt(
+            job, attempt, V4AttemptPhase.ClaimExtraction, prior));
+        oldGate.Dispose();
+        f.Db.Dispose(); // process crash boundary: no clean release event
+
+        using var reopened = ConversationStore.OpenFile(f.Path);
+        reopened.InitializeSchema();
+        using var nextGate = V5bProcessGate.Acquire(f.Path);
+        var current = reopened.AcquireV5bSession(job.SessionId, nextGate);
+
+        Assert.Equal(prior.Epoch + 1, current.Epoch);
+        Assert.Equal(1, reopened.GetV4AttemptCounts(job).SessionSharedAttempts);
+        Assert.Equal(1, reopened.GetV4AttemptCounts(job).UtteranceExtractionAttempts);
+        Assert.Throws<InvalidOperationException>(() =>
+            reopened.FinalizeModeratorAttempt(
+                job.SessionId, attempt, ModerationAttemptStatus.Completed, current));
+        Assert.False(reopened.TryReserveV4Attempt(
+            job, Guid.NewGuid(), V4AttemptPhase.ClaimExtraction, current));
+        Assert.Single(reopened.GetModeratorReservations(job.SessionId));
+    }
+
+    [Fact]
     public void Requests_reserved_before_v5b_opt_in_cannot_be_promoted_after_fencing()
     {
         using var f = Setup();
