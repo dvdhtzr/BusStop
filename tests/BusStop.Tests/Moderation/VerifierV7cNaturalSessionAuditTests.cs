@@ -285,6 +285,47 @@ public sealed class VerifierV7cNaturalSessionAuditTests
     }
 
     [Fact]
+    public void Registered_job_interrupted_before_frozen_claims_is_not_a_completed_verdict()
+    {
+        using var f = new Fixture();
+        var (speech, _) = f.Commit(
+            "The official report counted 12 bus delays.", 0);
+        var idInput = V6cShadowContract.EvaluationKey + "|" +
+            speech.Session + "|" + speech.Opportunity + "|" + speech.Id;
+        var jobId = new Guid(SHA256.HashData(
+            Encoding.UTF8.GetBytes(idInput)).AsSpan(0, 16));
+        var job = new VerificationJobIdentity(
+            jobId, speech.Session, speech.Opportunity, speech.Id,
+            speech.Speaker, speech.Sequence - 1,
+            EvidenceVerifierV1.ContractVersion,
+            Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(speech.Text))).ToLowerInvariant());
+        using (var gate = V5bProcessGate.Acquire(f.DatabasePath))
+            f.Store.RegisterV5aJob(job, V6cShadowContract.EvaluationKey);
+
+        var hash = V7cNaturalSessionAuditor.HashTranscript(
+            f.Store.GetCommittedUtterances(f.Session));
+        var coverage = new V6cShadowCoverage(
+            "shadow-verifier-v6c-1", f.Session, 1, 0, 1, 1, 0,
+            1, 0, 0, 0, 0, "Interrupted after registration");
+        var envelope = new V7cCoverageEnvelope(
+            V6cShadowContract.EvaluationKey, f.Session.ToString(),
+            coverage, Array.Empty<V6cShadowWorkerFault>(),
+            new V7cSessionTiming(100, null, 10, hash, hash),
+            "Synthetic interruption before claims were sealed");
+
+        var audit = f.Audit(envelope);
+        Assert.Equal(1, audit.ValidatedLedgerJobs);
+        Assert.Equal(0, audit.TerminalLedgerJobs);
+        Assert.Equal(1, audit.NonterminalLedgerJobs);
+        Assert.Equal(0, audit.ChargedVerificationAttempts);
+        Assert.True(audit.LedgerMatchesCoverage);
+        Assert.False(V7cNaturalSessionAuditor.ExportSafe(audit)
+            .CrashRecoveryGateTested);
+        // V5c's separate explicit recovery workflow owns this job.
+    }
+
+    [Fact]
     public void Blank_worksheet_never_self_certifies_human_authenticity()
     {
         using var f = new Fixture();
