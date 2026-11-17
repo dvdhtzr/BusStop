@@ -156,7 +156,7 @@ public static class V7ReviewFreezeValidator
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        Converters = { new JsonStringEnumConverter() }
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) }
     };
 
     /// <summary>
@@ -317,11 +317,17 @@ public static class V7ReviewFreezeValidator
             // Negative extraction examples (jokes, questions, opinions)
             // remain in the claim-selection denominator; a verifier must not
             // automatically promote them to material contradictions.
-            if (!item.ShouldExtractClaim &&
-                (item.RhetoricalMode == ClaimRhetoricalMode.Asserted ||
-                 item.ReviewedOutcome != ClaimVerificationOutcome.NoMaterialIssue ||
-                 item.SupportingReferences.Count != 0 ||
-                 item.OpposingReferences.Count != 0))
+            if ((item.ReviewedOutcome ==
+                    ClaimVerificationOutcome.ConfirmedContradiction &&
+                 (!item.ShouldExtractClaim ||
+                  item.RhetoricalMode != ClaimRhetoricalMode.Asserted ||
+                  item.Category == ClaimCategory.Other)) ||
+                (!item.ShouldExtractClaim &&
+                 (item.RhetoricalMode == ClaimRhetoricalMode.Asserted &&
+                  item.Category != ClaimCategory.Other ||
+                  item.ReviewedOutcome != ClaimVerificationOutcome.NoMaterialIssue ||
+                  item.SupportingReferences.Count != 0 ||
+                  item.OpposingReferences.Count != 0)))
                 throw new InvalidDataException(
                     "Negative extraction example cannot be an asserted material verdict.");
 
