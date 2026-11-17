@@ -272,6 +272,12 @@ public sealed class VerifierV5bOwnershipTests
             f.Db.FinalizeModeratorAttempt(job.SessionId, charged,
                 ModerationAttemptStatus.Interrupted, old));
         Assert.Throws<InvalidOperationException>(() =>
+            f.Db.FinalizeModeratorAttempt(job.SessionId, charged,
+                ModerationAttemptStatus.Completed, newer));
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.LinkV5aChargedAttempt(job.JobId, charged,
+                V4AttemptPhase.ClaimExtraction, Array.Empty<Guid>(), newer));
+        Assert.Throws<InvalidOperationException>(() =>
             f.Db.AssertV5bCanDispatch(old));
 
         Assert.Equal(1, f.Db.GetV4AttemptCounts(job).UtteranceExtractionAttempts);
@@ -280,6 +286,26 @@ public sealed class VerifierV5bOwnershipTests
         // No V5b automatic retry or charge refund. V5c will classify the
         // orphan Reserved attempt and decide whether a bounded retry is legal.
         Assert.Single(f.Db.GetModeratorReservations(job.SessionId));
+    }
+
+    [Fact]
+    public void Requests_reserved_before_v5b_opt_in_cannot_be_promoted_after_fencing()
+    {
+        using var f = Setup();
+        var (_, job) = Register(f);
+        var preFence = Guid.NewGuid();
+        Assert.True(f.Db.TryReserveV4Attempt(
+            job, preFence, V4AttemptPhase.ClaimExtraction));
+
+        using var gate = V5bProcessGate.Acquire(f.Path);
+        var lease = f.Db.AcquireV5bSession(f.Session.Id, gate);
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.FinalizeModeratorAttempt(job.SessionId, preFence,
+                ModerationAttemptStatus.Completed, lease));
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.LinkV5aChargedAttempt(job.JobId, preFence,
+                V4AttemptPhase.ClaimExtraction, Array.Empty<Guid>(), lease));
+        Assert.Equal(1, f.Db.GetV4AttemptCounts(job).UtteranceExtractionAttempts);
     }
 
     [Fact]
