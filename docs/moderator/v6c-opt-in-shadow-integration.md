@@ -48,7 +48,7 @@ dotnet run --project .\src\BusStop.Console\BusStop.Console.csproj -c Release -- 
 if ($LASTEXITCODE -ne 0) { throw 'V6c local shadow smoke FAILED' }
 ```
 
-Opt-in processing executes after dialogue ends, so a queue size of two intentionally drops all further selected observations from a long run; that is expected and measurable. The private coverage JSON is written to `<out>/v6c-private/v6c-coverage-<session>.private.json`. No private claims, evidence excerpts or raw model responses are exported into the console summary; source and judgments remain in local SQLite. `**/v6c-private/` is ignored by Git, but an external private directory is recommended.
+Opt-in processing executes after dialogue ends, so a queue size of two intentionally drops all further selected observations from a long run; that is expected and measurable. The private coverage JSON is written to `<out>/v6c-private/v6c-coverage-<session>.private.json` and includes utterance IDs plus exception **type names only** for failed jobs (never raw messages, sources, or prompts). No private claims, evidence excerpts or raw model responses are exported into the console summary; source and judgments remain in local SQLite. `**/v6c-private/` is ignored by Git, but an external private directory is recommended.
 
 ## Required model-free GREEN gate
 
