@@ -162,6 +162,8 @@ public static class V7ReviewFreezeValidator
         ValidateCorpus(holdout, V7Partition.Holdout);
         ValidateCriteria(criteria);
         ValidateApproval(approval);
+        RequireLaneCoverage(development, criteria, "development");
+        RequireLaneCoverage(holdout, criteria, "holdout");
 
         var devIds = development.Cases.Select(c => c.CaseId)
             .ToHashSet(StringComparer.Ordinal);
@@ -321,6 +323,17 @@ public static class V7ReviewFreezeValidator
 
         foreach (var lane in plan.Lanes)
         {
+            if (lane.Lane is not ("category:Other" or
+                    "rhetoric:ProtectedNonAsserted") &&
+                lane.MinimumConfirmedPositiveCases < 1)
+                throw new InvalidDataException(
+                    "Material fact/identity/history/dialogue lanes require " +
+                    "positive examples and frozen precision/recall thresholds.");
+            if (lane.Lane == "rhetoric:ProtectedNonAsserted" &&
+                lane.MinimumConfirmedPositiveCases != 0)
+                throw new InvalidDataException(
+                    "Protected nonasserted speech cannot be preregistered " +
+                    "as confirmed contradiction ground truth.");
             if (lane.MinimumIndependentCases < 1 ||
                 lane.MinimumCompletedCases < 1 ||
                 lane.MinimumCompletedCases > lane.MinimumIndependentCases ||
@@ -346,6 +359,38 @@ public static class V7ReviewFreezeValidator
                      !Valid(lane.NotApplicableReason, 500)))
                 throw new InvalidDataException(
                     "Absent contradiction class must be explicit; positive lanes require precision and recall criteria.");
+        }
+    }
+
+    private static void RequireLaneCoverage(
+        V7ReviewedCorpus corpus, V7AcceptanceCriteria criteria,
+        string partitionName)
+    {
+        // The denominator is independent *case inputs*, never same-case
+        // repeated runs. Each side must contain all four epistemic outcomes.
+        foreach (var outcome in Enum.GetValues<ClaimVerificationOutcome>())
+            if (!corpus.Cases.Any(c => c.ReviewedOutcome == outcome))
+                throw new InvalidDataException(
+                    partitionName + " lacks a reviewed " + outcome + " case.");
+
+        foreach (var rule in criteria.Lanes)
+        {
+            var candidates = rule.Lane == "rhetoric:ProtectedNonAsserted"
+                ? corpus.Cases.Where(c =>
+                    c.RhetoricalMode != ClaimRhetoricalMode.Asserted)
+                : corpus.Cases.Where(c =>
+                    "category:" + c.Category == rule.Lane);
+
+            var count = candidates.Count();
+            var positives = candidates.Count(c =>
+                c.ReviewedOutcome ==
+                ClaimVerificationOutcome.ConfirmedContradiction);
+
+            if (count < rule.MinimumIndependentCases ||
+                positives < rule.MinimumConfirmedPositiveCases)
+                throw new InvalidDataException(
+                    partitionName + " has fewer independent reviewed lane cases " +
+                    "or confirmed positives than preregistered.");
         }
     }
 
