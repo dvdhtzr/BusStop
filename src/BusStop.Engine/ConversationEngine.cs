@@ -1,4 +1,5 @@
 using BusStop.Moderation;
+using BusStop.Moderation.Verification;
 using BusStop.Context;
 using BusStop.Coordinator;
 using BusStop.Domain;
@@ -48,6 +49,7 @@ public sealed class ConversationEngine
     private readonly SessionMode _mode;
     private readonly ModerationSessionPolicy _moderationPolicy;
     private readonly IShadowModerationSink? _shadowSink;
+    private readonly IShadowModerationSink? _verifierSink;
 
     private readonly FloorCoordinator _coordinator;
     private int _opportunityOrdinal;
@@ -64,7 +66,8 @@ public sealed class ConversationEngine
         Func<DateTimeOffset>? clock = null,
         Action<string>? trace = null,
         RecollectionService? recollections = null,
-        IShadowModerationSink? shadowSink = null)
+        IShadowModerationSink? shadowSink = null,
+        IShadowModerationSink? verifierShadowSink = null)
     {
         _store = store;
         _model = model;
@@ -85,6 +88,18 @@ public sealed class ConversationEngine
         if (_moderationPolicy.Mode == ModerationOperatingMode.Disabled && shadowSink is not null)
             throw new InvalidOperationException("A disabled session cannot observe private candidates.");
         _shadowSink = shadowSink;
+        // V6c is independently opted in by a V4 policy PINNED before the first
+        // speaking opportunity. It never reuses or replaces M1's sink.
+        var verifierPolicy = store.GetV4VerifierPolicy(session);
+        if (verifierShadowSink is not null &&
+            verifierPolicy?.Mode != VerificationOperatingMode.Shadow)
+            throw new InvalidOperationException(
+                "V6c shadow observer requires an explicit pinned V4 shadow verifier policy.");
+        if (verifierPolicy?.Mode == VerificationOperatingMode.Shadow &&
+            verifierShadowSink is null)
+            throw new InvalidOperationException(
+                "An opted-in V6c session requires its private nonblocking verifier sink.");
+        _verifierSink = verifierShadowSink;
         _handles = participants.Select(p => new ParticipantHandle(p.Id, p.Name)).ToList();
         _profiles = participants.ToDictionary(p => p.Id);
 
@@ -237,7 +252,7 @@ public sealed class ConversationEngine
                     opportunityId, offer.Participant, DecisionAction.Speak, decision.Addressee, repliesTo, lastAttempt));
                 _coordinator.RecordSpoke(utterance.Id, offer.Participant, decision.Addressee);
                 _trace?.Invoke($"  {self.Name}: {decision.Text}");
-                if (_shadowSink is not null)
+                if (_shadowSink is not null || _verifierSink is not null)
                     completedObservation = new ShadowObservation(candidate, utterance.Id, history.ToArray());
                 break;
 
@@ -270,6 +285,21 @@ public sealed class ConversationEngine
             {
                 // Observation failure never becomes participant failure or silence.
                 try { _trace?.Invoke($"  [Moderator] observer error: {ex.Message}"); }
+                catch { /* Trace is observational, too. */ }
+            }
+        }
+        if (completedObservation is { } verifierObserved && _verifierSink is not null)
+        {
+            try
+            {
+                if (!_verifierSink.TryObserve(verifierObserved))
+                    _trace?.Invoke("  [Verifier] shadow observation dropped (queue full).");
+            }
+            catch (Exception ex)
+            {
+                // Secondary observation can never veto SPEAK or mutate any
+                // participant prompt, memory, coordinator or draft response.
+                try { _trace?.Invoke($"  [Verifier] observer error: {ex.GetType().Name}"); }
                 catch { /* Trace is observational, too. */ }
             }
         }
