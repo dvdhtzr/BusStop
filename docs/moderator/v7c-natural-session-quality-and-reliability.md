@@ -45,7 +45,7 @@ if ($LASTEXITCODE -ne 0) { throw 'V7a freeze CLI build FAILED' }
 Write-Host 'V7c MODEL-FREE LOCAL GREEN' -ForegroundColor Green
 ~~~
 
-The added VerifierV7cNaturalSessionAuditTests run real disposable SQLite with three personas and a scripted local model (no Ollama). The tests cover faithful transcript and ledger matching, read-only SQLite, queue overflow, tampered transcript hashes, corrupt V5a event rejection, registered-but-unfinished work needing explicit V5c recovery, private-versus-safe report fields, and blank/complete owner review.
+The 13 VerifierV7cNaturalSessionAuditTests run real disposable SQLite with three personas and a scripted local model (no Ollama). They test ledger/transcript consistency, read-only SQLite, queue overflow, transcript hash mismatches, an immutable V5a trigger that correctly rejects direct modification, and a separate offline-corruption scenario in which the update trigger is removed **only in a disposable test database** so the hash-chain validator must reject modified bytes. Also covered: nonterminal registration requiring explicit V5c recovery, private-versus-safe exports, and blank/complete human review. No production trigger or schema is weakened.
 
 ## Owner-local NATURAL Ollama experiment (additional gate, not default tests)
 
