@@ -93,7 +93,7 @@ public sealed class V6bLocalModelLab
 
             // Never include the provisional expectedOutcome, expected citation
             // lists, owner rationale or labels in the model prompt.
-            var unit = FreezeSynthetic(example);
+            var unit = FreezeSynthetic(example, corpus.Sha256);
             var prompt = V4GroundedVerifier.BuildPrompt(unit.Job,
                 new[] { unit.Package });
             var promptBytes = Encoding.UTF8.GetByteCount(prompt);
@@ -194,20 +194,25 @@ public sealed class V6bLocalModelLab
         return new V6bLabRun(score, audit);
     }
 
-    private static V6bFixtureUnit FreezeSynthetic(V6LabeledCase example)
+    private static V6bFixtureUnit FreezeSynthetic(
+        V6LabeledCase example, string corpusSha256)
     {
-        var session = SessionId.New();
-        var opportunity = OpportunityId.New();
-        var speaker = CharacterId.New();
+        // Stable identities are CRITICAL for valid repeated-input drift:
+        // randomized job/claim/packet IDs would change the V4 prompt between
+        // runs even if the underlying case had not changed.
+        Guid Stable(string role) => StableId(corpusSha256, example.CaseId, role);
+        var session = new SessionId(Stable("session"));
+        var opportunity = new OpportunityId(Stable("opportunity"));
+        var speaker = new CharacterId(Stable("speaker"));
         var speech = new Utterance(
-            UtteranceId.New(), session, opportunity, speaker, 1,
-            example.ClaimText, null, null, DateTimeOffset.UtcNow);
+            new UtteranceId(Stable("utterance")), session, opportunity,
+            speaker, 1, example.ClaimText, null, null, DateTimeOffset.UnixEpoch);
         var job = new VerificationJobIdentity(
-            Guid.NewGuid(), session, opportunity,
+            Stable("job"), session, opportunity,
             speech.Id, speaker, 0, EvidenceVerifierV1.ContractVersion,
             Sha(example.ClaimText));
         var claim = new ClaimCandidate(
-            Guid.NewGuid(), job.JobId, 0, 0, example.ClaimText.Length,
+            Stable("claim"), job.JobId, 0, 0, example.ClaimText.Length,
             example.ClaimText, example.Category, example.RhetoricalMode,
             ClaimExtractionProvenance.HostRule,
             ClaimValidationStatus.HostValidated);
@@ -228,7 +233,7 @@ public sealed class V6bLocalModelLab
             "fixed synthetic fixture list, not an exhaustive real-world search",
             evidence.Length == 0 ? "No synthetic items" : null);
         var packet = EvidencePacketFactory.Freeze(
-            Guid.NewGuid(), new EvidencePacketContent(
+            Stable("packet"), new EvidencePacketContent(
                 EvidenceVerifierV1.ContractVersion,
                 EvidenceVerifierV1.PacketSerializerVersion,
                 job.JobId, claim.ClaimId, 0,
@@ -248,6 +253,15 @@ public sealed class V6bLocalModelLab
     private static string Sha(string text) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))
             .ToLowerInvariant();
+
+    private static Guid StableId(string corpusSha, string caseId, string role)
+    {
+        var input = Encoding.UTF8.GetBytes(
+            V6bLabContract.Version + "\n" + corpusSha + "\n" +
+            caseId + "\n" + role);
+        var hash = SHA256.HashData(input);
+        return new Guid(hash.AsSpan(0, 16));
+    }
 
     private sealed record V6bFixtureUnit(
         VerificationJobIdentity Job, Utterance Utterance,
