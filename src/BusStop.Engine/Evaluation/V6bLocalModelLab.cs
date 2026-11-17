@@ -41,6 +41,9 @@ public sealed record V6bPrivateRunAudit(
     string RunId,
     string ModelName,
     string ModelDigest,
+    string V4PromptVersion,
+    string V4SchemaVersion,
+    string ScorerVersion,
     DateTimeOffset StartedAtUtc,
     IReadOnlyList<V6bPrivateCaseAudit> Cases,
     string Warning);
@@ -189,8 +192,11 @@ public sealed class V6bLocalModelLab
         var audit = new V6bPrivateRunAudit(
             V6bLabContract.Version, corpus.Document.CorpusVersion,
             corpus.Sha256, corpus.Document.LabelStatus, runId,
-            _model.ModelName, _model.ModelDigest, started,
-            Array.AsReadOnly(audits.ToArray()),
+            _model.ModelName, _model.ModelDigest,
+            EvidenceVerifierV4.VerificationPromptVersion,
+            EvidenceVerifierV4.VerificationSchemaVersion,
+            V6EvaluationContract.ScorerVersion,
+            started, Array.AsReadOnly(audits.ToArray()),
             "PRIVATE SYNTHETIC DEVELOPMENT ONLY. This lab bypasses V2 live retrieval, " +
             "V5 budget/session orchestration and automatic rhetorical short-circuiting. " +
             "Labels are unreviewed; V4 host parsing is not semantic proof.");
