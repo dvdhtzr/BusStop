@@ -69,7 +69,12 @@ public static class V7cDispositionAnalyzer
             audit.TranscriptSha256 != hash ||
             audit.CommittedUtterances != speech.Count ||
             !audit.LedgerMatchesCoverage ||
-            !audit.CoverageInternallyConsistent)
+            !audit.CoverageInternallyConsistent ||
+            !audit.CoverageMatchesCommittedCount ||
+            !audit.TranscriptSequenceValid ||
+            !audit.ThreeParticipantSession ||
+            !audit.TranscriptMutationCheckAvailable ||
+            !audit.TranscriptUnchangedAcrossVerifierDrain)
             throw new InvalidDataException(
                 "V7c diagnosis needs the matching original validated audit.");
 
