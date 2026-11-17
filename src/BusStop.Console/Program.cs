@@ -532,6 +532,7 @@ foreach (var (mode, label, briefing) in plan)
                 contractVersion = V6cShadowContract.EvaluationKey,
                 session = session.ToString(),
                 coverage,
+                workerFaults = verifierWorker.Faults,
                 pinnedPolicy = verifierPolicy,
                 note = "IN-PROCESS coverage; crash before job registration is UNKNOWN. " +
                        "No finding has participant authority or modifies the transcript."
