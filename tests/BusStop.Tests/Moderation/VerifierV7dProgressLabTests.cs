@@ -89,13 +89,14 @@ public sealed class VerifierV7dProgressLabTests
         var analysis = V7dProgressAnalyzer.Analyze(rows, FakeTranscriptSha);
         var worksheet = V7dProgressCalibration.CreateBlank(analysis);
         var review = Reviewed(worksheet, index =>
-            new V7dProgressTurnReview(index + 1,
-                analysis.Signals[index].TextSha256,
-                UnproductiveLoop: false,
-                HealthyDisagreementOrCallback: index == 1,
-                MeaningfulNewMove: index == 0,
-                InventedSharedHistory: false,
-                Notes: "Second line is a deliberately quoted callback."));
+            worksheet.Turns[index] with
+            {
+                UnproductiveLoop = false,
+                HealthyDisagreementOrCallback = index == 1,
+                MeaningfulNewMove = index == 0,
+                InventedSharedHistory = false,
+                Notes = "Second line is a deliberately quoted callback."
+            });
 
         var score = V7dProgressCalibration.CalibrateDevelopment(
             analysis, review);
@@ -116,6 +117,10 @@ public sealed class VerifierV7dProgressLabTests
         var worksheet = V7dProgressCalibration.CreateBlank(analysis);
         Assert.Equal(2, worksheet.Turns.Count);
         Assert.All(worksheet.Turns, row => Assert.Null(row.UnproductiveLoop));
+        Assert.True(V7dProgressCalibration.CreateBlank(
+            V7dProgressAnalyzer.Analyze(
+                Turns("An original thought", "An original thought"),
+                FakeTranscriptSha)).Turns[1].ExactCopyCandidate);
         Assert.Throws<InvalidDataException>(() =>
             V7dProgressCalibration.CalibrateDevelopment(
                 analysis, worksheet));
@@ -131,13 +136,14 @@ public sealed class VerifierV7dProgressLabTests
         var analysis = V7dProgressAnalyzer.Analyze(turns, FakeTranscriptSha);
         var worksheet = V7dProgressCalibration.CreateBlank(analysis);
         var review = Reviewed(worksheet, i =>
-            new V7dProgressTurnReview(i + 1,
-                analysis.Signals[i].TextSha256,
-                UnproductiveLoop: i < 20,
-                HealthyDisagreementOrCallback: i >= 20 && i < 30,
-                MeaningfulNewMove: i >= 20,
-                InventedSharedHistory: false,
-                Notes: null));
+            worksheet.Turns[i] with
+            {
+                UnproductiveLoop = i < 20,
+                HealthyDisagreementOrCallback = i >= 20 && i < 30,
+                MeaningfulNewMove = i >= 20,
+                InventedSharedHistory = false,
+                Notes = null
+            });
         var safe = V7dProgressCalibration.CalibrateDevelopment(
             analysis, review);
         Assert.Equal(40, safe.ReviewedTurns);
@@ -160,8 +166,14 @@ public sealed class VerifierV7dProgressLabTests
         var analysis = V7dProgressAnalyzer.Analyze(rows, FakeTranscriptSha);
         var worksheet = V7dProgressCalibration.CreateBlank(analysis);
         var review = Reviewed(worksheet, i =>
-            new V7dProgressTurnReview(i + 1,
-                analysis.Signals[i].TextSha256, false, false, true, false, null));
+            worksheet.Turns[i] with
+            {
+                UnproductiveLoop = false,
+                HealthyDisagreementOrCallback = false,
+                MeaningfulNewMove = true,
+                InventedSharedHistory = false,
+                Notes = null
+            });
 
         Assert.Throws<InvalidDataException>(() =>
             V7dProgressCalibration.CalibrateDevelopment(analysis,
@@ -169,6 +181,15 @@ public sealed class VerifierV7dProgressLabTests
 
         var corrupted = review.Turns.ToArray();
         corrupted[0] = corrupted[0] with { TextSha256 = new string('f', 64) };
+        Assert.Throws<InvalidDataException>(() =>
+            V7dProgressCalibration.CalibrateDevelopment(analysis,
+                review with { Turns = corrupted }));
+
+        corrupted[0] = review.Turns[0] with
+        {
+            BroadLexicalEchoCandidate =
+                !review.Turns[0].BroadLexicalEchoCandidate
+        };
         Assert.Throws<InvalidDataException>(() =>
             V7dProgressCalibration.CalibrateDevelopment(analysis,
                 review with { Turns = corrupted }));
