@@ -407,6 +407,17 @@ public sealed class V4GroundedVerifier
             Return one independent outcome for EACH claimId, matching its packetId and packetSha256 exactly.
             Allowed outcomes: ConfirmedContradiction, NoMaterialIssue, InsufficientEvidence, ConflictingEvidence.
             ConfirmedContradiction requires DIRECT MATERIAL CONFLICT with relevant cited stronger evidence.
+            CRITICAL OUTPUT CONTRACT for EACH ConfirmedContradiction:
+              - problematicText MUST be a NONEMPTY, verbatim contiguous substring of that claim's claimText.
+                Copying its FULL claimText exactly is acceptable. Never return an empty problematicText.
+              - opposingReferences MUST be a NONEMPTY array of exact referenceId strings copied from
+                that claim's content.Items, referring to actually contradicting authoritative evidence.
+                Cite referenceId, NOT sourceId, sourceVersion, packetId or a narrative description.
+              - If you cannot supply BOTH a verbatim problematicText AND at least one authorized
+                contradictory referenceId, output InsufficientEvidence instead.
+            For all outcomes, include both supportingReferences and opposingReferences as JSON arrays
+            (use [] when there are no citations), and a nonempty explanation.
+            Copy jobId, claimId, packetId and packetSha256 EXACTLY from the corresponding input.
             An absent biography detail is NOT a contradiction. Provisional histories and superseded recollections
             are not binding. Committed dialogue proves WHAT was said, not whether the statement was true.
             A news article reports what its source says, not automatically objective fact.
