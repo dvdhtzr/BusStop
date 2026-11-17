@@ -301,20 +301,20 @@ public sealed class VerifierV6cShadowIntegrationTests
     }
 
     [Fact]
-    public void Unknown_evidence_does_not_require_an_ollama_call_or_claim_truth()
+    public void Rhetorical_question_requires_no_verifier_inference()
     {
         using var f = new Fixture();
-        var (speech, observation) = f.Speak("I worked as a pilot for thirty years.");
+        var (speech, observation) = f.Speak("Did the report count 12 outages?");
         var worker = f.Worker();
         worker.TryObserve(observation);
         worker.DrainAsync().GetAwaiter().GetResult();
         Assert.Equal(0, f.Model.Calls);
-        var checkpoint = f.Store.ReadV5aCheckpoint(f.Job(speech));
-        Assert.True(checkpoint.IsTerminal);
-        Assert.Equal(0, checkpoint.Summary!.ConfirmedContradictions);
-        Assert.Contains(checkpoint.ClaimResults, c =>
-            c.Judgment?.Outcome == ClaimVerificationOutcome.InsufficientEvidence);
-        Assert.Equal(0, f.Store.GetV4AttemptCounts(checkpoint.Job)
+        var result = f.Store.ReadV5aCheckpoint(f.Job(speech));
+        Assert.True(result.IsTerminal);
+        Assert.Equal(0, result.Summary!.ConfirmedContradictions);
+        Assert.Contains(result.Claims, c =>
+            c.RhetoricalMode == ClaimRhetoricalMode.Question);
+        Assert.Equal(0, f.Store.GetV4AttemptCounts(result.Job)
             .SessionSharedAttempts);
     }
 
