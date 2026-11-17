@@ -28,6 +28,7 @@ public sealed class V5bProcessGate : IDisposable
     }
 
     public string CanonicalDatabasePath { get; }
+    internal Guid InstanceId { get; } = Guid.NewGuid();
 
     public static V5bProcessGate Acquire(string databasePath)
     {
