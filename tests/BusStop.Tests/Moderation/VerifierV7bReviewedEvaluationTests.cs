@@ -376,6 +376,69 @@ public sealed class VerifierV7bReviewedEvaluationTests
     }
 
     [Fact]
+    public void Same_frozen_review_case_produces_byte_identical_v4_prompts_across_runs()
+    {
+        var approved = Approved();
+        var model = new ScriptedModel(request => Answer(request,
+            ClaimVerificationOutcome.ConfirmedContradiction));
+        var lab = new V7bReviewedModelLab(model);
+        var a = lab.Run(approved, V7Partition.Development, "stable-one", 1);
+        var b = lab.Run(approved, V7Partition.Development, "stable-two", 1);
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(Assert.Single(a.PrivateAudit.Cases).OracleV4Prompt,
+            Assert.Single(b.PrivateAudit.Cases).OracleV4Prompt);
+        Assert.Equal(Assert.Single(a.PrivateAudit.Cases).RawModelResponse,
+            Assert.Single(b.PrivateAudit.Cases).RawModelResponse);
+        Assert.Equal(0, V7bSafeExporter.Drift(a, b).ChangedOracleOutcomeCount);
+    }
+
+    [Fact]
+    public void Host_rejects_out_of_scope_model_citation_without_semantic_credit()
+    {
+        var a = Approved();
+        var model = new ScriptedModel(request =>
+        {
+            var response = Answer(request,
+                ClaimVerificationOutcome.ConfirmedContradiction);
+            return ModelResponse.Responded(response.RawJson!.Replace(
+                "src-1", "unseen-injected-source", StringComparison.Ordinal));
+        });
+        var run = new V7bReviewedModelLab(model).Run(
+            a, V7Partition.Development, "forged-source", 1);
+        Assert.Equal(1, model.Calls);
+        Assert.Equal(0, run.Score.Overall.OracleCompleted);
+        Assert.Equal(0, run.Score.Overall.OracleContradictionTruePositives);
+        Assert.Equal(1, run.Score.Overall.OracleTechnicalFailures);
+        Assert.Equal(1, V7bSafeExporter.From(run, a).HostRejectedResponses);
+    }
+
+    [Fact]
+    public void Safe_export_rejects_private_model_digest_or_freeze_mismatch()
+    {
+        var a = Approved();
+        var model = new ScriptedModel(request => Answer(
+            request, ClaimVerificationOutcome.ConfirmedContradiction));
+        var run = new V7bReviewedModelLab(model).Run(
+            a, V7Partition.Development, "tamper-check", 1);
+        Assert.Throws<InvalidDataException>(() =>
+            V7bSafeExporter.From(run with
+            {
+                PrivateAudit = run.PrivateAudit with
+                {
+                    ModelDigest = new string('c', 64)
+                }
+            }, a));
+        Assert.Throws<InvalidDataException>(() =>
+            V7bSafeExporter.From(run with
+            {
+                PrivateAudit = run.PrivateAudit with
+                {
+                    CorpusSha256 = new string('e', 64)
+                }
+            }, a));
+    }
+
+    [Fact]
     public void Invalid_json_is_technical_not_an_epistemic_no_issue()
     {
         var model = new ScriptedModel(_ => ModelResponse.Responded("{}"));
