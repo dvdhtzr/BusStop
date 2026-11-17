@@ -72,14 +72,15 @@ public sealed partial class ConversationStore
             packets.Count > checkpoint.Claims.Count)
             throw new InvalidDataException("V5a packet count exceeds claims or frozen safety cap.");
 
+        if (packets.Any(p => p?.Content is null))
+            throw new InvalidDataException("V5a packet or content is missing.");
         var ids = new HashSet<Guid>();
         var ordered = packets.OrderBy(p => p.Content.ClaimId.ToString("D"),
             StringComparer.Ordinal).ToArray();
-        var committed = V5aCommitted(checkpoint.Job);
         foreach (var packet in ordered)
         {
-            if (packet is null || !ids.Add(packet.Content.ClaimId))
-                throw new InvalidDataException("V5a has a null or duplicate claim packet.");
+            if (!ids.Add(packet.Content.ClaimId))
+                throw new InvalidDataException("V5a has a duplicate claim packet.");
             var claim = checkpoint.Claims.SingleOrDefault(c =>
                 c.ClaimId == packet.Content.ClaimId)
                 ?? throw new InvalidDataException("V5a packet refers to unknown claim.");
@@ -88,10 +89,41 @@ public sealed partial class ConversationStore
                 packet.Content.PromptVersion !=
                     checkpoint.PinnedPolicy.ExtractionPromptVersion)
                 throw new InvalidDataException("V5a packet versions differ from the pinned session.");
+            // Validate the supplied immutable envelope independently from
+            // retrieval, including id, canonical bytes and SHA.
+            var freeze = EvidencePacketFactory.Freeze(
+                packet.PacketId, packet.Content);
+            if (freeze.CanonicalJson != packet.CanonicalJson ||
+                freeze.Sha256 != packet.Sha256)
+                throw new InvalidDataException("V5a packet envelope/hash is inconsistent.");
+        }
 
-            // This first WRITE is allowed to validate the original-boundary
-            // host-issued V2 evidence. Subsequent reads/recovery NEVER fetch a
-            // newer replacement packet or rewrite the frozen canonical bytes.
+        var snapshot = V5aJson(ordered.Select(p =>
+            new V5aPacketEnvelope(p.PacketId, p.Content.ClaimId, p.Sha256)).ToArray());
+        var existingFreeze = checkpoint.Events.SingleOrDefault(e =>
+            e.Stage == V5aLedgerStage.PacketsSealed);
+        if (existingFreeze is not null)
+        {
+            // True replay reads ONLY the previous immutable snapshot. In
+            // particular, it does not perform new evidence retrieval.
+            if (existingFreeze.PayloadJson != snapshot ||
+                checkpoint.Packets.Count != ordered.Length ||
+                ordered.Any(p => !checkpoint.Packets.Any(saved =>
+                    saved.PacketId == p.PacketId &&
+                    saved.Sha256 == p.Sha256 &&
+                    saved.CanonicalJson == p.CanonicalJson)))
+                throw new InvalidDataException(
+                    "V5a packet freeze idempotency key reused with changed bytes.");
+            return;
+        }
+
+        var committed = V5aCommitted(checkpoint.Job);
+        foreach (var packet in ordered)
+        {
+            var claim = checkpoint.Claims.Single(c =>
+                c.ClaimId == packet.Content.ClaimId);
+            // Only FIRST freeze checks host-issued evidence at the original
+            // boundary. A sealed packet is never rebuilt from later retrieval.
             var selected = SelectVerifierEvidence(checkpoint.Job, committed,
                 V5aEffectiveCategory(claim), maxItems: 32);
             EvidenceVerificationValidator.ValidatePacket(packet, claim,
@@ -104,8 +136,6 @@ public sealed partial class ConversationStore
                 throw new InvalidDataException("V5a packet falsely claims complete evidence scope.");
         }
 
-        var snapshot = V5aJson(ordered.Select(p =>
-            new V5aPacketEnvelope(p.PacketId, p.Content.ClaimId, p.Sha256)).ToArray());
         using var tx = _connection.BeginTransaction(deferred: false);
         if (V5aStageIsSame(tx, jobId, "packets:sealed", snapshot))
         {
