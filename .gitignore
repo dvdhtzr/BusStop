@@ -488,3 +488,9 @@ $RECYCLE.BIN/
 *.db
 *.db-journal
 *.db-wal
+
+# Private V4+ evidence-verifier acceptance and observation artifacts
+# Avoid accidentally committing owner-only claims, sources and citations.
+data/*-private-*.json
+data/*-private-*.jsonl
+**/*.private-audit.json
