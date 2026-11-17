@@ -301,7 +301,7 @@ public static class V7ReviewFreezeValidator
             foreach (var evidence in item.Evidence)
             {
                 if (evidence is null ||
-                    !ValidId(evidence.ReferenceId) ||
+                    !ValidReferenceId(evidence.ReferenceId) ||
                     !refs.Add(evidence.ReferenceId) ||
                     !Enum.IsDefined(evidence.Kind) ||
                     !Enum.IsDefined(evidence.AuthorityTier) ||
@@ -570,6 +570,13 @@ public static class V7ReviewFreezeValidator
     private static bool IsHash(string? value) =>
         value is { Length: 64 } &&
         Regex.IsMatch(value, "^[a-f0-9]{64}$", RegexOptions.CultureInvariant);
+
+    // Real V3 source reference IDs include namespaced colons and GUIDs,
+    // unlike the simplified lowercase IDs of the synthetic V6a mini-corpus.
+    private static bool ValidReferenceId(string? value) =>
+        value is { Length: >= 3 and <= 256 } &&
+        Regex.IsMatch(value, @"^[A-Za-z0-9][A-Za-z0-9._:/~-]*$",
+            RegexOptions.CultureInvariant);
 
     private static bool Fraction(decimal value) => value is >= 0m and <= 1m;
     private static bool Valid(string? value, int max) =>
