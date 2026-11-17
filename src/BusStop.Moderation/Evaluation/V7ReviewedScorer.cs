@@ -32,6 +32,7 @@ public sealed record V7ReviewedCaseScore(
     bool CategoryCorrect,
     bool RhetoricalModeCorrect,
     bool FalseExtractionOnProtected,
+    int ExtraDetectedCandidates,
     VerificationOperationalStatus Status,
     ClaimVerificationOutcome? Outcome,
     bool? OracleOutcomeMatch,
@@ -51,6 +52,7 @@ public sealed record V7ReviewedLane(
     int ExactSpanHits,
     int ProtectedCases,
     int ProtectedExtractionFalsePositives,
+    int ExtraDetectedCandidates,
     int CorrectCategories,
     int CorrectRhetoricalModes,
     int OracleCompleted,
@@ -77,7 +79,7 @@ public sealed record V7ReviewedLane(
         d == 0 ? null : (decimal)n / d;
 
     public decimal? ExtractionPrecision => Ratio(
-        ExactSpanHits, ExactSpanHits + ProtectedExtractionFalsePositives);
+        ExactSpanHits, ExactSpanHits + ExtraDetectedCandidates);
     public decimal? ExtractionRecall => Ratio(
         ExactSpanHits, ExpectedExtractedCases);
     public decimal? RhetoricalAccuracy => Ratio(
@@ -190,6 +192,8 @@ public static class V7ReviewedScorer
                 obs.Outcome.HasValue !=
                     (obs.Status == VerificationOperationalStatus.Completed) ||
                 (obs.Outcome.HasValue && !Enum.IsDefined(obs.Outcome.Value)) ||
+                (obs.Status == VerificationOperationalStatus.Completed &&
+                    obs.ChargedLocalModelCalls != 1) ||
                 (!item.ShouldExtractClaim &&
                     (obs.Outcome.HasValue || obs.ChargedLocalModelCalls != 0 ||
                      obs.Status != VerificationOperationalStatus.NotStarted)) ||
@@ -212,7 +216,7 @@ public static class V7ReviewedScorer
                     example.CaseId, "category:" + example.Category,
                     example.RhetoricalMode, example.ShouldExtractClaim,
                     example.ReviewedOutcome, false, false, false, false,
-                    false, VerificationOperationalStatus.NotStarted,
+                    false, 0, VerificationOperationalStatus.NotStarted,
                     null, null, null, false, null, null, 0, 0));
                 continue;
             }
@@ -245,6 +249,8 @@ public static class V7ReviewedScorer
                 obs.CategoryCorrect, obs.RhetoricalModeCorrect,
                 !example.ShouldExtractClaim &&
                     obs.DetectedCandidateCount > 0,
+                Math.Max(0, obs.DetectedCandidateCount -
+                    (example.ShouldExtractClaim && obs.ExactSpanDetected ? 1 : 0)),
                 obs.Status, obs.Outcome,
                 obs.Outcome.HasValue
                     ? obs.Outcome == example.ReviewedOutcome : null,
@@ -392,6 +398,7 @@ public static class V7ReviewedScorer
             rows.Count(x => x.ShouldExtract && x.ExactSpanDetected),
             rows.Count(x => !x.ShouldExtract),
             rows.Count(x => x.FalseExtractionOnProtected),
+            rows.Sum(x => x.ExtraDetectedCandidates),
             rows.Count(x => x.ShouldExtract && x.CategoryCorrect),
             rows.Count(x => x.ShouldExtract && x.RhetoricalModeCorrect),
             complete.Length,
