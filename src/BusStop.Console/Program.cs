@@ -4,6 +4,8 @@ using BusStop.Console;
 using BusStop.Coordinator;
 using BusStop.Domain;
 using BusStop.Engine;
+using BusStop.Engine.Verification;
+using BusStop.Moderation.Verification;
 using BusStop.Memory;
 using BusStop.Moderation;
 using BusStop.Models;
@@ -218,6 +220,7 @@ var freshBridge = argv.Contains("--fresh-bridge");
 var c2Attribution = argv.Contains("--c2-attribution");
 var discussDocument = argv.Contains("--discuss-document");
 var shadowMode = argv.Contains("--shadow-moderator");
+var verifierShadowMode = argv.Contains("--verifier-shadow");
 
 int PositiveOption(string name, int fallback, int maximum)
 {
@@ -234,6 +237,24 @@ var endAfterPasses = PositiveOption("--end-after-passes", 2, 100);
 var moderatorBudget = PositiveOption("--moderator-budget", 24, 1000);
 var moderatorSampleEvery = PositiveOption("--moderator-sample-every", 3, 1000);
 var moderatorTimeout = PositiveOption("--moderator-timeout", 180, 3600);
+var verifierBudget = verifierShadowMode
+    ? PositiveOption("--verifier-budget", 24, 1000) : 0;
+var verifierSampleEvery = verifierShadowMode
+    ? PositiveOption("--verifier-sample-every", 1, 1000) : 1;
+var verifierQueueCapacity = verifierShadowMode
+    ? PositiveOption("--verifier-queue-capacity", 8, 32) : 8;
+var verifierTimeout = verifierShadowMode
+    ? PositiveOption("--verifier-timeout", 180, 3600) : 180;
+if ((verifierShadowMode && modelKind != "ollama") ||
+    (!verifierShadowMode && argv.Any(x =>
+        x.StartsWith("--verifier-", StringComparison.Ordinal) &&
+        x != "--verifier-shadow")))
+{
+    System.Console.Error.WriteLine(
+        "V6c requires --model ollama --verifier-shadow. " +
+        "Verifier options cannot silently enable a session.");
+    return 2;
+}
 
 if (!shadowMode && argv.Any(arg => arg.StartsWith("--moderator-", StringComparison.Ordinal)) ||
     shadowMode && modelKind != "ollama")
@@ -375,6 +396,50 @@ if (shadowMode)
         $"{moderatorSampleEvery} committed utterances.");
 }
 
+// Explicit V6c policy is separate from M1. Verifier transport is always
+// local loopback even if the participant --ollama-url points elsewhere.
+OllamaAdapter? verifierAdapter = null;
+V4SessionPolicy? verifierPolicy = null;
+if (verifierShadowMode)
+{
+    var localEndpoint = new Uri("http://127.0.0.1:11434");
+    if (!OllamaAdapter.IsAvailable(localEndpoint))
+    {
+        System.Console.Error.WriteLine(
+            "[Verifier] Local Ollama 127.0.0.1:11434 unreachable; no V6c opt-in.");
+        moderatorAdapter?.Dispose();
+        ollamaAdapter?.Dispose();
+        return 2;
+    }
+    var verifierName = Arg("--verifier-model") ?? "qwen3.5:9b";
+    verifierAdapter = new OllamaAdapter(
+        verifierName, localEndpoint, temperature: 0.1,
+        timeout: TimeSpan.FromSeconds(verifierTimeout), think: false);
+    if (string.IsNullOrWhiteSpace(verifierAdapter.ModelDigest) ||
+        verifierAdapter.ModelDigest == "unknown")
+    {
+        System.Console.Error.WriteLine(
+            "[Verifier] Exact local model digest unavailable; refusing opt-in.");
+        verifierAdapter.Dispose();
+        moderatorAdapter?.Dispose();
+        ollamaAdapter?.Dispose();
+        return 2;
+    }
+    verifierPolicy = new V4SessionPolicy(
+        EvidenceVerifierV4.ContractVersion, VerificationOperatingMode.Shadow,
+        V3ClaimDetector.RuleVersion, V3ModelClaimExtractor.PromptVersion,
+        EvidenceVerifierV4.VerificationPromptVersion,
+        V3EvidencePacketAssembler.RetrievalSelectorVersion,
+        EvidenceVerifierV4.VerificationSchemaVersion,
+        verifierAdapter.ModelName, verifierAdapter.ModelDigest,
+        0.1, false, verifierBudget, 3, 2, 2048, 8192);
+    verifierPolicy.Validate();
+    System.Console.WriteLine(
+        "[Verifier] V6c SHADOW ONLY; new sessions only; deferred until dialogue and M1 drain. " +
+        $"Local model {verifierAdapter.ModelName}, session ceiling {verifierBudget}, " +
+        $"sample every {verifierSampleEvery}, queue {verifierQueueCapacity}.");
+}
+
 using var store = ConversationStore.OpenFile(dbPath);
 store.InitializeSchema();
 
@@ -407,6 +472,18 @@ foreach (var (mode, label, briefing) in plan)
         store, mode, modelConfigVersion, briefing, contextVersion, moderatorPolicy);
     if (documentSnapshot is not null)
         store.PinSessionEvidence(session, documentSnapshot.SnapshotId, documentPassages!);
+    // Pin V4 BEFORE any opportunity is offered; no legacy session is opted
+    // in merely by running an upgraded binary or installing its schema.
+    if (verifierPolicy is not null)
+        store.PinV4VerifierPolicy(session, verifierPolicy);
+
+    V6cShadowVerifier? verifierWorker = null;
+    if (verifierAdapter is not null && verifierPolicy is not null)
+        verifierWorker = new V6cShadowVerifier(
+            dbPath, session, verifierPolicy, verifierAdapter,
+            sampleEvery: verifierSampleEvery,
+            queueCapacity: verifierQueueCapacity);
+
     ShadowModerationWorker? shadowWorker = null;
     if (moderatorAdapter is not null)
     {
@@ -427,13 +504,42 @@ foreach (var (mode, label, briefing) in plan)
             store, client, Laboratory.BuildContextBuilder(c2Attribution), session,
             Laboratory.Cast, briefing, engineOptions, trace: trace,
             recollections: mode == SessionMode.Continuing ? recollectionService : null,
-            shadowSink: shadowWorker).Run();
+            shadowSink: shadowWorker,
+            verifierShadowSink: verifierWorker).Run();
     }
     finally
     {
         // Wait only AFTER authoritative conversation processing stops.
         // Never wait for a shadow review between two participant turns.
         shadowWorker?.DrainAsync().GetAwaiter().GetResult();
+        // V6c never competes with live participants OR M1 on Ollama. The
+        // secondary queue drains only after the original M1 process finishes.
+        verifierWorker?.DrainAsync().GetAwaiter().GetResult();
+    }
+
+    if (verifierWorker is not null)
+    {
+        var coverage = verifierWorker.Coverage;
+        var privateDir = Path.Combine(outDir, "v6c-private");
+        Directory.CreateDirectory(privateDir);
+        var privateReport = Path.Combine(privateDir,
+            $"v6c-coverage-{session}.private.json");
+        File.WriteAllText(privateReport,
+            JsonSerializer.Serialize(new
+            {
+                contractVersion = V6cShadowContract.EvaluationKey,
+                session = session.ToString(),
+                coverage,
+                pinnedPolicy = verifierPolicy,
+                note = "IN-PROCESS coverage; crash before job registration is UNKNOWN. " +
+                       "No finding has participant authority or modifies the transcript."
+            }, new JsonSerializerOptions { WriteIndented = true }));
+        System.Console.WriteLine(
+            $"[Verifier] V6c shadow: selected={coverage.Selected}, " +
+            $"notSelected={coverage.NotSelected}, dropped={coverage.Dropped}, " +
+            $"registered={coverage.DurableJobsRegistered}, " +
+            $"summaries={coverage.JobsSummarized}, incomplete={coverage.IncompleteSummaries}, " +
+            $"workerErrors={coverage.WorkerFailures}; private report: {privateReport}");
     }
 
     if (shadowWorker is not null)
@@ -494,6 +600,7 @@ foreach (var (mode, label, briefing) in plan)
 }
 
 moderatorAdapter?.Dispose();
+verifierAdapter?.Dispose();
 ollamaAdapter?.Dispose();
 
 // Single run: keep transcript.md / diagnostics.json for the usual single-run flow.
