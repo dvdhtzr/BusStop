@@ -104,6 +104,16 @@ static int Run(string[] args)
 
         for (int i = 0; i < runs; i++)
         {
+            // Recheck /api/tags before EACH repeated run. A model silently
+            // replaced under the same tag cannot pass a same-digest drift test.
+            using (var digestCheck = new OllamaAdapter(
+                name, endpoint: new Uri("http://127.0.0.1:11434"),
+                temperature: 0.1, think: false))
+            {
+                if (digestCheck.ModelDigest != model.ModelDigest)
+                    throw new InvalidOperationException(
+                        "Local Ollama model digest changed across V6b repeats.");
+            }
             var runId = "v6b-" + DateTimeOffset.UtcNow.ToString(
                 "yyyyMMddHHmmss", CultureInfo.InvariantCulture) +
                 "-" + Guid.NewGuid().ToString("N");
