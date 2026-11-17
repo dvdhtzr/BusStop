@@ -347,6 +347,8 @@ public static class V6EvaluationScorer
         // wrongly cites nothing.
         var citationCases = completed.Where(r => r.CitedReferenceCount > 0 ||
             r.ExpectedOutcome is ClaimVerificationOutcome.ConfirmedContradiction or
+                ClaimVerificationOutcome.ConflictingEvidence ||
+            r.ObservedOutcome is ClaimVerificationOutcome.ConfirmedContradiction or
                 ClaimVerificationOutcome.ConflictingEvidence).ToArray();
         int truePositives = completed.Count(c =>
             c.ExpectedOutcome == ClaimVerificationOutcome.ConfirmedContradiction &&
