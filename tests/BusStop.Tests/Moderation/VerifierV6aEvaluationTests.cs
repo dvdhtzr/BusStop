@@ -193,6 +193,53 @@ public sealed class VerifierV6aEvaluationTests
     }
 
     [Fact]
+    public void Invalid_completed_verdict_shape_is_reported_as_technical_problem()
+    {
+        var f = Fixture();
+        var c = f.Document.Cases.Single(x =>
+            x.CaseId == "source-exact-contradiction");
+        var forged = new V6CaseObservation(
+            c.CaseId, V6SelectionDisposition.Selected,
+            VerificationOperationalStatus.Completed,
+            ClaimVerificationOutcome.ConfirmedContradiction,
+            Array.Empty<string>(), Array.Empty<string>(),
+            "not-an-exact-span", 1);
+        var result = V6EvaluationScorer.Score(f, "invalid-verdict-shape",
+            new[] { forged });
+        Assert.Equal(1, result.Overall.InvalidVerdictShapes);
+        Assert.Equal(1, result.Overall.InvalidContradictionSpans);
+        Assert.Equal(0, result.Overall.ReferencesRelevantCount);
+        Assert.False(result.AcceptanceAllowed);
+    }
+
+    [Fact]
+    public void Operational_statuses_are_counted_separately_from_semantics()
+    {
+        var f = Fixture();
+        var c = f.Document.Cases.Take(3).ToArray();
+        var observations = new[]
+        {
+            new V6CaseObservation(c[0].CaseId, V6SelectionDisposition.Selected,
+                VerificationOperationalStatus.InvalidResponse, null,
+                Array.Empty<string>(), Array.Empty<string>(), "", 1),
+            new V6CaseObservation(c[1].CaseId, V6SelectionDisposition.Selected,
+                VerificationOperationalStatus.TransportFailure, null,
+                Array.Empty<string>(), Array.Empty<string>(), "", 1),
+            new V6CaseObservation(c[2].CaseId, V6SelectionDisposition.Skipped,
+                VerificationOperationalStatus.SkippedForBudget, null,
+                Array.Empty<string>(), Array.Empty<string>(), "", 0)
+        };
+        var result = V6EvaluationScorer.Score(f, "technical-lane", observations);
+        Assert.Equal(1, result.Overall.InvalidResponses);
+        Assert.Equal(1, result.Overall.TransportFailures);
+        Assert.Equal(1, result.Overall.BudgetSkipped);
+        Assert.Equal(0, result.Overall.Completed);
+        Assert.Equal(0, result.ConfusionMatrix.Sum(x => x.Count));
+        Assert.Equal(2, result.Overall.OperationalFailures);
+        Assert.Equal(1, result.Overall.Skipped);
+    }
+
+    [Fact]
     public void Technical_failure_is_not_counted_as_an_epistemic_judgment()
     {
         var f = Fixture();
