@@ -237,6 +237,9 @@ public sealed partial class ConversationStore
             insert.Parameters.AddWithValue("@at", now);
             insert.ExecuteNonQuery();
         }
+        // Stamp request and fencing epoch in the SAME transaction as its
+        // shared-budget reservation. A restarted owner cannot recycle it.
+        V5bStampAttempt(tx, job.SessionId, requestId, ownership);
         tx.Commit();
         return true;
     }
