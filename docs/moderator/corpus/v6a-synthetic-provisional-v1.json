@@ -1,0 +1,445 @@
+{
+  "corpusVersion": "busstop-v6a-provisional-synthetic-v1",
+  "labelStatus": "provisional-owner-review-required",
+  "partition": "development",
+  "origin": "Fully synthetic fictional mini-corpus. Never real news, private transcripts, or owner-approved semantic labels. Evaluation development only; no acceptance threshold or holdout.",
+  "cases": [
+    {
+      "caseId": "source-exact-contradiction",
+      "scenarioGroup": "source",
+      "category": "SourceFact",
+      "rhetoricalMode": "Asserted",
+      "claimText": "The official report counted 12 outages.",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "The official report recorded exactly 3 outages.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "ConfirmedContradiction",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [
+        "src-1"
+      ],
+      "rationale": "Direct number conflicts with the exposed report."
+    },
+    {
+      "caseId": "source-exact-match",
+      "scenarioGroup": "source",
+      "category": "SourceFact",
+      "rhetoricalMode": "Asserted",
+      "claimText": "The official report counted 3 outages.",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "The official report recorded exactly 3 outages.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [
+        "src-1"
+      ],
+      "expectedOpposingRefs": [],
+      "rationale": "Exact agreement is not a material contradiction."
+    },
+    {
+      "caseId": "source-unreported-claim",
+      "scenarioGroup": "source",
+      "category": "SourceFact",
+      "rhetoricalMode": "Asserted",
+      "claimText": "The airport served vegetarian meals.",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "The official report recorded exactly 3 outages.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "InsufficientEvidence",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "The source makes no assertion about meals."
+    },
+    {
+      "caseId": "source-conflicting-snapshots",
+      "scenarioGroup": "source",
+      "category": "SourceFact",
+      "rhetoricalMode": "Asserted",
+      "claimText": "The local report said there were 7 closures.",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "Official bulletin A said 3 closures.",
+          "isSuperseded": false
+        },
+        {
+          "referenceId": "src-2",
+          "kind": "Passage",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "Official bulletin B said 7 closures.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "ConflictingEvidence",
+      "expectedSupportingRefs": [
+        "src-2"
+      ],
+      "expectedOpposingRefs": [
+        "src-1"
+      ],
+      "rationale": "Two eligible sources conflict rather than establishing an unequivocal contradiction."
+    },
+    {
+      "caseId": "identity-binding-contradiction",
+      "scenarioGroup": "identity",
+      "category": "CharacterIdentity",
+      "rhetoricalMode": "Asserted",
+      "claimText": "I have always been an airline pilot.",
+      "evidence": [
+        {
+          "referenceId": "anchor-1",
+          "kind": "BioAnchor",
+          "authorityTier": "BindingAnchor",
+          "visibility": "OwnHistory",
+          "excerpt": "I have never held a pilot license and worked as a machinist.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "ConfirmedContradiction",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [
+        "anchor-1"
+      ],
+      "rationale": "Binding fictional identity contradicts the self-claim."
+    },
+    {
+      "caseId": "identity-no-anchor",
+      "scenarioGroup": "identity",
+      "category": "CharacterIdentity",
+      "rhetoricalMode": "Asserted",
+      "claimText": "I once took flying lessons.",
+      "evidence": [],
+      "expectedOutcome": "InsufficientEvidence",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "No binding record can disprove a plausible new autobiographical detail."
+    },
+    {
+      "caseId": "identity-nonbinding-memory",
+      "scenarioGroup": "identity",
+      "category": "CharacterIdentity",
+      "rhetoricalMode": "Asserted",
+      "claimText": "I like mystery novels.",
+      "evidence": [
+        {
+          "referenceId": "history-1",
+          "kind": "History",
+          "authorityTier": "ProvisionalRecollection",
+          "visibility": "OwnHistory",
+          "excerpt": "Arthur may enjoy science fiction.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "InsufficientEvidence",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "Provisional recollection cannot defeat a new preference."
+    },
+    {
+      "caseId": "history-established-conflict",
+      "scenarioGroup": "history",
+      "category": "PersonalHistory",
+      "rhetoricalMode": "Asserted",
+      "claimText": "I have never lived in Brookfield.",
+      "evidence": [
+        {
+          "referenceId": "history-1",
+          "kind": "History",
+          "authorityTier": "EstablishedRecollection",
+          "visibility": "OwnHistory",
+          "excerpt": "Arthur repeatedly stated that he lived in Brookfield for ten years.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "ConfirmedContradiction",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [
+        "history-1"
+      ],
+      "rationale": "An established self-recollection directly conflicts with this absolute denial."
+    },
+    {
+      "caseId": "history-superseded-correction",
+      "scenarioGroup": "history",
+      "category": "PersonalHistory",
+      "rhetoricalMode": "Asserted",
+      "claimText": "I now live in Lakeside.",
+      "evidence": [
+        {
+          "referenceId": "history-1",
+          "kind": "History",
+          "authorityTier": "SupersededRecollection",
+          "visibility": "OwnHistory",
+          "excerpt": "Arthur used to live in Brookfield.",
+          "isSuperseded": true
+        },
+        {
+          "referenceId": "history-2",
+          "kind": "History",
+          "authorityTier": "EstablishedRecollection",
+          "visibility": "OwnHistory",
+          "excerpt": "Arthur moved to Lakeside last spring.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [
+        "history-2"
+      ],
+      "expectedOpposingRefs": [],
+      "rationale": "Newer established history supersedes the old address; a change is not a contradiction."
+    },
+    {
+      "caseId": "history-new-anecdote",
+      "scenarioGroup": "history",
+      "category": "PersonalHistory",
+      "rhetoricalMode": "Asserted",
+      "claimText": "I once lost my keys on a ferry.",
+      "evidence": [
+        {
+          "referenceId": "history-1",
+          "kind": "History",
+          "authorityTier": "ProvisionalRecollection",
+          "visibility": "OwnHistory",
+          "excerpt": "Arthur told a story about a train trip.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "InsufficientEvidence",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "Lack of a recorded ferry story does not prove it never happened."
+    },
+    {
+      "caseId": "dialogue-exact-misattribution",
+      "scenarioGroup": "dialogue",
+      "category": "DialogueAttribution",
+      "rhetoricalMode": "Asserted",
+      "claimText": "Bea said there were 12 delays.",
+      "evidence": [
+        {
+          "referenceId": "said-1",
+          "kind": "Utterance",
+          "authorityTier": "PreviouslyHeardUtterance",
+          "visibility": "SharedDialogue",
+          "excerpt": "Bea: There were exactly 3 delays, not 12.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "ConfirmedContradiction",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [
+        "said-1"
+      ],
+      "rationale": "The recorded visible utterance explicitly contradicts the claimed attribution."
+    },
+    {
+      "caseId": "dialogue-unknown-remark",
+      "scenarioGroup": "dialogue",
+      "category": "DialogueAttribution",
+      "rhetoricalMode": "Asserted",
+      "claimText": "Bea mentioned red balloons earlier.",
+      "evidence": [
+        {
+          "referenceId": "said-1",
+          "kind": "Utterance",
+          "authorityTier": "PreviouslyHeardUtterance",
+          "visibility": "SharedDialogue",
+          "excerpt": "Bea: The buses arrived on time.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "InsufficientEvidence",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "A selected historical excerpt is not an exhaustive proof of absence."
+    },
+    {
+      "caseId": "dialogue-correct-attribution",
+      "scenarioGroup": "dialogue",
+      "category": "DialogueAttribution",
+      "rhetoricalMode": "Asserted",
+      "claimText": "Bea said the buses arrived on time.",
+      "evidence": [
+        {
+          "referenceId": "said-1",
+          "kind": "Utterance",
+          "authorityTier": "PreviouslyHeardUtterance",
+          "visibility": "SharedDialogue",
+          "excerpt": "Bea: The buses arrived on time.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [
+        "said-1"
+      ],
+      "expectedOpposingRefs": [],
+      "rationale": "The quote matches the prior visible utterance."
+    },
+    {
+      "caseId": "dialogue-disputed-memory",
+      "scenarioGroup": "dialogue",
+      "category": "DialogueAttribution",
+      "rhetoricalMode": "Asserted",
+      "claimText": "Bea said the bridge was closed.",
+      "evidence": [
+        {
+          "referenceId": "said-1",
+          "kind": "Utterance",
+          "authorityTier": "PreviouslyHeardUtterance",
+          "visibility": "SharedDialogue",
+          "excerpt": "Bea: I remember the bridge being closed.",
+          "isSuperseded": false
+        },
+        {
+          "referenceId": "said-2",
+          "kind": "Utterance",
+          "authorityTier": "PreviouslyHeardUtterance",
+          "visibility": "SharedDialogue",
+          "excerpt": "Cal: I remember the bridge being open.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [
+        "said-1"
+      ],
+      "expectedOpposingRefs": [],
+      "rationale": "A different speaker's disagreement is not proof that Bea never said it."
+    },
+    {
+      "caseId": "other-humor",
+      "scenarioGroup": "humor",
+      "category": "Other",
+      "rhetoricalMode": "Humorous",
+      "claimText": "Aliens stole all the traffic lights!",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "The traffic control outage lasted 42 minutes.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "An obvious joke should not be enforced as literal source contradiction."
+    },
+    {
+      "caseId": "other-question",
+      "scenarioGroup": "rhetoric",
+      "category": "Other",
+      "rhetoricalMode": "Question",
+      "claimText": "Did the report say there were 12 outages?",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "The report recorded 3 outages.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "A question does not assert twelve outages."
+    },
+    {
+      "caseId": "other-quoted-disagreement",
+      "scenarioGroup": "rhetoric",
+      "category": "SourceFact",
+      "rhetoricalMode": "Quoted",
+      "claimText": "Someone claimed there were 12 outages.",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "The report recorded 3 outages.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "Reporting someone's claim is not endorsing it."
+    },
+    {
+      "caseId": "other-opinion",
+      "scenarioGroup": "rhetoric",
+      "category": "Other",
+      "rhetoricalMode": "Speculative",
+      "claimText": "I suspect this policy is unnecessarily complicated.",
+      "evidence": [],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "A subjective view cannot be judged as a falsified source fact."
+    },
+    {
+      "caseId": "source-conditional",
+      "scenarioGroup": "rhetoric",
+      "category": "SourceFact",
+      "rhetoricalMode": "Conditional",
+      "claimText": "If there were 12 outages, that would explain the delays.",
+      "evidence": [
+        {
+          "referenceId": "src-1",
+          "kind": "Briefing",
+          "authorityTier": "SourceSnapshot",
+          "visibility": "ExposedToSpeaker",
+          "excerpt": "The report recorded 3 outages.",
+          "isSuperseded": false
+        }
+      ],
+      "expectedOutcome": "NoMaterialIssue",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "A counterfactual conditional is not an assertion that twelve outages occurred."
+    },
+    {
+      "caseId": "source-unknown-visibility",
+      "scenarioGroup": "source",
+      "category": "SourceFact",
+      "rhetoricalMode": "Asserted",
+      "claimText": "The mayor authorized a bridge closure.",
+      "evidence": [],
+      "expectedOutcome": "InsufficientEvidence",
+      "expectedSupportingRefs": [],
+      "expectedOpposingRefs": [],
+      "rationale": "No host-authorized evidence packet is available to verify the assertion."
+    }
+  ]
+}
