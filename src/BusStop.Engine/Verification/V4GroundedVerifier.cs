@@ -382,7 +382,9 @@ public sealed class V4GroundedVerifier
         ClaimCandidate claim, VerificationOperationalStatus status, string detail) =>
         new(claim.ClaimId, status, null, detail);
 
-    private static string BuildPrompt(
+    /// <summary>Exact production V4 prompt shared with an isolated V6b local probe;
+    /// exposing the formatter does not dispatch or register any verifier.</summary>
+    public static string BuildPrompt(
         VerificationJobIdentity job, IReadOnlyList<V3PackagedClaim> claims)
     {
         var payload = new
