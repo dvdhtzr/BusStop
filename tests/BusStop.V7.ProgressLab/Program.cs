@@ -121,11 +121,17 @@ static int Run(string[] args)
 
             case "template":
                 var dest = Path.GetFullPath(Required("--output"));
-                var repo = Path.GetFullPath(Directory.GetCurrentDirectory());
+                // Locate the nearest BusStop repository root regardless of
+                // whether the owner launched the tool from its root or a child.
+                var candidate = new DirectoryInfo(Directory.GetCurrentDirectory());
+                while (candidate is not null &&
+                    !File.Exists(Path.Combine(candidate.FullName, "BusStop.sln")))
+                    candidate = candidate.Parent;
+                var repo = candidate?.FullName;
                 var comparison = OperatingSystem.IsWindows()
                     ? StringComparison.OrdinalIgnoreCase
                     : StringComparison.Ordinal;
-                if (File.Exists(Path.Combine(repo, "BusStop.sln")) &&
+                if (repo is not null &&
                     (dest.Equals(repo, comparison) ||
                      dest.StartsWith(repo + Path.DirectorySeparatorChar,
                          comparison)))
