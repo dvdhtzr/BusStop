@@ -125,8 +125,12 @@ public static class V7dProgressCalibration
                 throw new InvalidDataException(
                     "Unreviewed, altered or contradictory V7d labels.");
 
+            // All three signal families and the broad exploratory bucket
+            // contribute to recall-oriented HUMAN REVIEW triage only.
+            // Candidate precision is expected to reveal false positives.
             var predicted = signal.ExactPriorUtterance ||
                 signal.LexicalOverlapCandidate ||
+                signal.BroadLexicalEchoCandidate ||
                 signal.LoopWindowCandidate;
             var truth = label.UnproductiveLoop.Value;
             if (truth) positive++; else negative++;
