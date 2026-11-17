@@ -17,6 +17,10 @@ public static class V7FreezeContract
     public const string ReviewVersion = "busstop-v7a-review-v1";
     public const string ThresholdVersion = "busstop-v7a-thresholds-v1";
     public const string ApprovalVersion = "busstop-v7a-freeze-approval-v1";
+    // V7b will implement this separate owner-reviewed scoring contract;
+    // never reuse V6a's provisional scorer for release readiness.
+    public const string PlannedReviewedScorerVersion =
+        "busstop-v7b-reviewed-scoring-v1";
     public const string LabelStatus = "owner-reviewed-attested";
     public const string ReviewMethod = "independent-human-adjudication";
     public const int MaxDocumentBytes = 512_000;
@@ -342,10 +346,12 @@ public static class V7ReviewFreezeValidator
         if (plan.Version != V7FreezeContract.ThresholdVersion ||
             !Valid(plan.ModelName, 200) ||
             !Valid(plan.ModelDigest, 256) ||
-            plan.ModelDigest.Equals("unknown", StringComparison.OrdinalIgnoreCase) ||
-            !Valid(plan.VerifierPromptVersion, 160) ||
-            !Valid(plan.VerificationSchemaVersion, 160) ||
-            !Valid(plan.ScorerVersion, 160) ||
+            !IsHash(plan.ModelDigest) ||
+            plan.VerifierPromptVersion !=
+                EvidenceVerifierV4.VerificationPromptVersion ||
+            plan.VerificationSchemaVersion !=
+                EvidenceVerifierV4.VerificationSchemaVersion ||
+            plan.ScorerVersion != V7FreezeContract.PlannedReviewedScorerVersion ||
             plan.MinimumIdenticalInputRuns < 2 ||
             plan.MinimumNaturalSessions < 1 ||
             plan.MinimumCrashScenarios < 1 ||
