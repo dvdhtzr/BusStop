@@ -17,7 +17,7 @@ ee7d59bf51b05c900a03293dea41ef7e1082c5b2b9d1fa04def0de8671e3c2d5
 
 This is development evidence, NOT an unseen holdout. It is tied to the authoritative SQLite transcript and private V6c coverage, the factory story and Arthur/Maya/Daniel profiles in src/BusStop.Console/Laboratory.cs, the original V7c private human worksheet and the existing V7c audit. Retain the original files together locally; the transcript, source excerpts, reviewer identities/notes, real dialogues, and original model digests are NOT committed.
 
-V7d review labels per turn: UnproductiveLoop, HealthyDisagreementOrCallback, MeaningfulNewMove, InventedSharedHistory, optional Notes. ReviewerAlias, ReviewedAtUtc (UTC), and an exact attestation are required. Sequence and TextSha256 are sealed bindings to the source turn; review starts with all labels null and must be completed manually.
+V7d review labels per turn: UnproductiveLoop, HealthyDisagreementOrCallback, MeaningfulNewMove, InventedSharedHistory, optional Notes. ReviewerAlias, ReviewedAtUtc (UTC), and an exact attestation are required. Sequence and TextSha256 are sealed bindings to the source turn. The PRIVATE template also contains tamper-checked analyzer outputs for each turn (ExactCopyCandidate with source sequence, StrictLexicalOverlapCandidate, BroadLexicalEchoCandidate, LoopWindowCandidate), so the owner can inspect EXACTLY which claims prompted review beside the existing V7c transcript. The candidate flags are not human labels or findings; review labels start null and must be completed manually.
 
 Known investigation examples, NOT auto-approved labels:
 - turns 20-21: exactly repeated text across characters; deterministic duplicate candidate
