@@ -344,6 +344,31 @@ public sealed class VerifierV6cShadowIntegrationTests
     }
 
     [Fact]
+    public void Mutated_candidate_notification_cannot_register_a_different_committed_text()
+    {
+        using var f = new Fixture();
+        var (speech, observation) = f.Speak(
+            "The official report counted 12 outages.");
+        var counterfeit = observation with
+        {
+            Candidate = observation.Candidate with
+            {
+                Text = "The official report counted 99 outages."
+            }
+        };
+        var worker = f.Worker();
+        Assert.True(worker.TryObserve(counterfeit));
+        worker.DrainAsync().GetAwaiter().GetResult();
+        Assert.Equal(0, worker.Coverage.DurableJobsRegistered);
+        Assert.Equal(1, worker.Coverage.WorkerFailures);
+        Assert.Equal(0, f.Model.Calls);
+        Assert.Throws<InvalidDataException>(() =>
+            f.Store.ReadV5aCheckpoint(f.Job(speech)));
+        Assert.Equal("The official report counted 12 outages.",
+            f.Store.GetCommittedUtterances(f.Session.Id).Single().Text);
+    }
+
+    [Fact]
     public void Crash_before_drain_never_promises_durable_registration()
     {
         using var f = new Fixture();
