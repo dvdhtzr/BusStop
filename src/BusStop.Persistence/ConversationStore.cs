@@ -22,6 +22,23 @@ public sealed partial class ConversationStore : IDisposable
 
     public static ConversationStore OpenFile(string path) => new($"Data Source={path}");
 
+    /// <summary>
+    /// V7c/offline audit: SQLite itself enforces read-only access. It cannot
+    /// silently create a missing database or migrate its schema.
+    /// Do not call InitializeSchema() on this connection.
+    /// </summary>
+    public static ConversationStore OpenReadOnly(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            throw new FileNotFoundException("V7c requires an existing SQLite database.");
+        var connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.GetFullPath(path),
+            Mode = SqliteOpenMode.ReadOnly
+        };
+        return new ConversationStore(connection.ToString());
+    }
+
     public void InitializeSchema()
     {
         // Refuse unknown newer verifier ledger schemas before any migration.
