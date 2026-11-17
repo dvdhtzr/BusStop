@@ -95,13 +95,14 @@ public static class V7dProgressAnalyzer
                     "V7d transcript contains an invalid or out-of-order turn.");
 
             var words = Tokens.Matches(turn.Text.ToLowerInvariant())
-                .Select(m => m.Value).ToArray();
+                .Cast<Match>().Select(m => m.Value).ToArray();
             // Ignore punctuation/case differences for candidate exact copies.
             // Empty normalization is never proof of duplicated speech.
             var normalized = string.Join(" ", words);
             var set = words.ToHashSet(StringComparer.Ordinal);
+            long exactAt = 0;
             var exact = normalized.Length > 0 &&
-                seenExact.TryGetValue(normalized, out var exactAt);
+                seenExact.TryGetValue(normalized, out exactAt);
             if (!exact && normalized.Length > 0)
                 seenExact.Add(normalized, turn.Sequence);
 
