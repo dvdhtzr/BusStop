@@ -131,8 +131,8 @@ public sealed class V7bReviewedModelLab
 
             var extracted = V3ClaimDetector.Detect(unit.Job, unit.Utterance);
             var exact = extracted.Claims.FirstOrDefault(c =>
-                c.StartUtf16 == item.ClaimStartUtf16 &&
-                c.LengthUtf16 == item.ClaimLengthUtf16);
+                c.Start == item.ClaimStartUtf16 &&
+                c.Length == item.ClaimLengthUtf16);
             var exactMatched = exact is not null;
             var correctCategory = exact?.Category == item.Category;
             var correctRhetoric = exact?.RhetoricalMode == item.RhetoricalMode;
