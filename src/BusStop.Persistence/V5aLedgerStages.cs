@@ -14,7 +14,8 @@ namespace BusStop.Persistence;
 /// </summary>
 public sealed partial class ConversationStore
 {
-    public void SealV5aClaims(Guid jobId, IReadOnlyList<ClaimCandidate> claims)
+    public void SealV5aClaims(Guid jobId, IReadOnlyList<ClaimCandidate> claims,
+        V5bOwnership? ownership = null)
     {
         ArgumentNullException.ThrowIfNull(claims);
         var checkpoint = ReadV5aCheckpoint(jobId);
@@ -30,6 +31,7 @@ public sealed partial class ConversationStore
         var snapshot = V5aJson(claims.ToArray());
 
         using var tx = _connection.BeginTransaction(deferred: false);
+        V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
         if (V5aStageIsSame(tx, jobId, "claims:sealed", snapshot))
         {
             tx.Commit();
@@ -62,7 +64,8 @@ public sealed partial class ConversationStore
         tx.Commit();
     }
 
-    public void SealV5aPackets(Guid jobId, IReadOnlyList<EvidencePacket> packets)
+    public void SealV5aPackets(Guid jobId, IReadOnlyList<EvidencePacket> packets,
+        V5bOwnership? ownership = null)
     {
         ArgumentNullException.ThrowIfNull(packets);
         var checkpoint = ReadV5aCheckpoint(jobId);
@@ -114,6 +117,10 @@ public sealed partial class ConversationStore
                     saved.CanonicalJson == p.CanonicalJson)))
                 throw new InvalidDataException(
                     "V5a packet freeze idempotency key reused with changed bytes.");
+            // Repeated freeze is read-only but still requires valid ownership.
+            using var replayTx = _connection.BeginTransaction(deferred: false);
+            V5bAssertSessionOwner(replayTx, checkpoint.Job.SessionId, ownership);
+            replayTx.Commit();
             return;
         }
 
@@ -137,6 +144,7 @@ public sealed partial class ConversationStore
         }
 
         using var tx = _connection.BeginTransaction(deferred: false);
+        V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
         if (V5aStageIsSame(tx, jobId, "packets:sealed", snapshot))
         {
             tx.Commit();
@@ -182,7 +190,7 @@ public sealed partial class ConversationStore
     /// </summary>
     public void LinkV5aChargedAttempt(
         Guid jobId, Guid requestId, V4AttemptPhase phase,
-        IReadOnlyList<Guid> claimIds)
+        IReadOnlyList<Guid> claimIds, V5bOwnership? ownership = null)
     {
         ArgumentNullException.ThrowIfNull(claimIds);
         if (requestId == Guid.Empty ||
@@ -211,6 +219,7 @@ public sealed partial class ConversationStore
         var key = "attempt:" + V5aId(requestId);
 
         using var tx = _connection.BeginTransaction(deferred: false);
+        V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
         V5aVerifyChargedRequest(tx, checkpoint.Job, requestId, phase);
         if (V5aStageIsSame(tx, jobId, key, payload))
         {
@@ -240,7 +249,7 @@ public sealed partial class ConversationStore
     }
 
     public void RecordV5aClaimResult(Guid jobId, VerificationClaimResult result,
-        Guid? verificationRequestId = null)
+        Guid? verificationRequestId = null, V5bOwnership? ownership = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         var checkpoint = ReadV5aCheckpoint(jobId);
@@ -290,6 +299,7 @@ public sealed partial class ConversationStore
             result, verificationRequestId));
         var key = "result:" + V5aId(result.ClaimId);
         using var tx = _connection.BeginTransaction(deferred: false);
+        V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
         if (V5aStageIsSame(tx, jobId, key, eventJson))
         {
             tx.Commit();
@@ -324,7 +334,8 @@ public sealed partial class ConversationStore
         tx.Commit();
     }
 
-    public void SealV5aSummary(Guid jobId, VerificationObservationSummary summary)
+    public void SealV5aSummary(Guid jobId, VerificationObservationSummary summary,
+        V5bOwnership? ownership = null)
     {
         ArgumentNullException.ThrowIfNull(summary);
         var checkpoint = ReadV5aCheckpoint(jobId);
@@ -340,6 +351,7 @@ public sealed partial class ConversationStore
         var json = V5aJson(summary);
 
         using var tx = _connection.BeginTransaction(deferred: false);
+        V5bAssertSessionOwner(tx, checkpoint.Job.SessionId, ownership);
         if (V5aStageIsSame(tx, jobId, "summary:sealed", json))
         {
             tx.Commit();
