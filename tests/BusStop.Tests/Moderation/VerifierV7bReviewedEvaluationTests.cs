@@ -26,10 +26,15 @@ public sealed class VerifierV7bReviewedEvaluationTests
     private sealed class ScriptedModel : IModelClient
     {
         private readonly Func<ModelRequest, ModelResponse> _response;
-        public ScriptedModel(Func<ModelRequest, ModelResponse> response) =>
+        private readonly string _digest;
+        public ScriptedModel(Func<ModelRequest, ModelResponse> response,
+            string? digest = null)
+        {
             _response = response;
+            _digest = digest ?? FullDigest;
+        }
         public string ModelName => "synthetic-v7b-model";
-        public string ModelDigest => FullDigest;
+        public string ModelDigest => _digest;
         public int Calls { get; private set; }
         public ModelResponse Decide(ModelRequest request,
             CancellationToken cancellationToken = default)
@@ -259,7 +264,7 @@ public sealed class VerifierV7bReviewedEvaluationTests
             opposition ?? Array.Empty<string>(),
             verdict == ClaimVerificationOutcome.ConfirmedContradiction
                 ? "12 outages" : "",
-            charged, 100);
+            charged, charged == 0 ? 0 : 100);
 
     [Fact]
     public void Approved_inputs_are_deep_read_only_and_dont_grant_semantic_acceptance()
@@ -388,11 +393,12 @@ public sealed class VerifierV7bReviewedEvaluationTests
     [Fact]
     public void Wrong_model_digest_fails_before_any_inference()
     {
-        var model = new ScriptedModel(_ => ModelResponse.TransportError());
+        var model = new ScriptedModel(_ => ModelResponse.TransportError(),
+            new string('c', 64));
         var a = Approved();
         Assert.Throws<InvalidDataException>(() =>
             new V7bReviewedModelLab(model).Run(
-                a, (V7Partition)999, "wrong-partition", 1));
+                a, V7Partition.Development, "wrong-digest", 1));
         Assert.Equal(0, model.Calls);
     }
 
