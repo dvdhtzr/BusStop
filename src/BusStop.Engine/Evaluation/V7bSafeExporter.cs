@@ -206,6 +206,7 @@ public static class V7bSafeExporter
             rows.Count(x => x.ShouldExtract && x.ExactSpanDetected),
             rows.Count(x => !x.ShouldExtract),
             rows.Count(x => x.FalseExtractionOnProtected),
+            rows.Sum(x => x.ExtraDetectedCandidates),
             rows.Count(x => x.ShouldExtract && x.CategoryCorrect),
             rows.Count(x => x.ShouldExtract && x.RhetoricalModeCorrect),
             completed.Length,
