@@ -430,6 +430,90 @@ public sealed class VerifierV7cNaturalSessionAuditTests
     }
 
     [Fact]
+    public void Read_only_disposition_breakdown_reconciles_one_run_without_claiming_acceptance()
+    {
+        using var f = new Fixture();
+        var (coverage, _) = f.BuildRun();
+        using var reader = ConversationStore.OpenReadOnly(f.DatabasePath);
+        var audit = V7cNaturalSessionAuditor.Audit(reader, f.Session, coverage);
+        var diagnosis = V7cDispositionAnalyzer.Analyze(reader, f.Session, audit);
+        var safe = diagnosis.Safe;
+
+        Assert.Equal(audit.ValidatedLedgerJobs, safe.RegisteredJobs);
+        Assert.Equal(audit.TerminalLedgerJobs,
+            safe.TerminalComplete + safe.TerminalPartial +
+            safe.TerminalIncomplete);
+        Assert.Equal(audit.IncompleteLedgerSummaries,
+            safe.TerminalPartial + safe.TerminalIncomplete);
+        Assert.Equal(audit.NonterminalLedgerJobs, safe.Nonterminal);
+        Assert.Equal(safe.RegisteredJobs,
+            safe.JobsWithNoSelectedClaims +
+            safe.JobsWithOnlyProtectedOrOtherClaims +
+            safe.JobsWithAssertedMaterialButNoEligibleEvidence +
+            safe.JobsEligibleForVerificationWithoutDispatch +
+            safe.JobsWithVerificationDispatch + safe.Nonterminal);
+        Assert.Equal(audit.ChargedVerificationAttempts, safe.ChargedV4Calls);
+        Assert.True(safe.LedgerAndTranscriptCrossChecked);
+        Assert.False(safe.HumanReviewCompleted);
+        Assert.False(safe.SemanticAcceptanceGranted);
+        Assert.False(safe.EnforcementAuthorized);
+        Assert.Equal(3, diagnosis.PrivateIndex.Count);
+        var json = System.Text.Json.JsonSerializer.Serialize(safe);
+        Assert.DoesNotContain("Elmvale", json);
+        Assert.DoesNotContain("Arthur", json);
+        Assert.DoesNotContain("SpeakerId", json);
+        Assert.DoesNotContain("Sequence", json);
+    }
+
+    [Fact]
+    public void No_cue_speech_is_accounted_for_without_fabricating_model_dispatch()
+    {
+        using var f = new Fixture();
+        var (speech, observation) = f.Commit("A pleasant morning.", 0);
+        var worker = new V6cShadowVerifier(
+            f.DatabasePath, f.Session, f.Policy, f.Model,
+            sampleEvery: 1, queueCapacity: 8);
+        var before = V7cNaturalSessionAuditor.HashTranscript(
+            f.Store.GetCommittedUtterances(f.Session));
+        Assert.True(worker.TryObserve(observation));
+        worker.DrainAsync().GetAwaiter().GetResult();
+        var after = V7cNaturalSessionAuditor.HashTranscript(
+            f.Store.GetCommittedUtterances(f.Session));
+        var envelope = new V7cCoverageEnvelope(
+            V6cShadowContract.EvaluationKey, f.Session.ToString(),
+            worker.Coverage, worker.Faults,
+            new V7cSessionTiming(100, null, 20, before, after),
+            "Model-free no-cue test");
+        using var reader = ConversationStore.OpenReadOnly(f.DatabasePath);
+        var audit = V7cNaturalSessionAuditor.Audit(reader, f.Session, envelope);
+        var analysis = V7cDispositionAnalyzer.Analyze(reader, f.Session, audit);
+        Assert.Equal(1, analysis.Safe.RegisteredJobs);
+        Assert.Equal(1, analysis.Safe.JobsWithNoSelectedClaims);
+        Assert.Equal(0, analysis.Safe.ChargedV4Calls);
+        Assert.Equal(0, f.Model.Calls);
+        Assert.Equal("NoHostSelectedClaims",
+            Assert.Single(analysis.PrivateIndex).Disposition);
+    }
+
+    [Fact]
+    public void Disposition_refuses_mismatched_or_mechanically_unverified_audit()
+    {
+        using var f = new Fixture();
+        var (coverage, _) = f.BuildRun();
+        using var reader = ConversationStore.OpenReadOnly(f.DatabasePath);
+        var audit = V7cNaturalSessionAuditor.Audit(reader, f.Session, coverage);
+        Assert.Throws<InvalidDataException>(() =>
+            V7cDispositionAnalyzer.Analyze(reader, f.Session,
+                audit with { TranscriptSha256 = new string('f', 64) }));
+        Assert.Throws<InvalidDataException>(() =>
+            V7cDispositionAnalyzer.Analyze(reader, f.Session,
+                audit with { CoverageInternallyConsistent = false }));
+        Assert.Throws<InvalidDataException>(() =>
+            V7cDispositionAnalyzer.Analyze(reader, f.Session,
+                audit with { TranscriptUnchangedAcrossVerifierDrain = false }));
+    }
+
+    [Fact]
     public void Missing_utterance_in_review_prevents_false_completed_claim()
     {
         using var f = new Fixture();
