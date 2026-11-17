@@ -88,6 +88,8 @@ internal static class V5aLedgerSchema
             claim_id          TEXT NOT NULL,
             operational_status TEXT NOT NULL,
             packet_id         TEXT NULL REFERENCES verifier_v5a_packets(packet_id),
+            attempt_request_id TEXT NULL
+                REFERENCES verifier_v5a_attempt_links(request_id),
             result_json       TEXT NOT NULL,
             result_sha256     TEXT NOT NULL,
             judgment_schema  TEXT NOT NULL,
