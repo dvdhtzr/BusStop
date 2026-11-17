@@ -194,9 +194,8 @@ public sealed class VerifierV7dProgressLabTests
             V7dProgressCalibration.CalibrateDevelopment(analysis,
                 review with { Turns = corrupted }));
 
-        corrupted[0] = corrupted[0] with
+        corrupted[0] = review.Turns[0] with
         {
-            TextSha256 = analysis.Signals[0].TextSha256,
             UnproductiveLoop = true,
             HealthyDisagreementOrCallback = true
         };
