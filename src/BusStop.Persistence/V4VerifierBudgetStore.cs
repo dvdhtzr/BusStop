@@ -163,6 +163,7 @@ public sealed partial class ConversationStore
         // A fenced V5b session cannot dispatch an unowned inference request.
         // Check in the SAME transaction as the shared-budget reservation.
         V5bAssertSessionOwner(tx, job.SessionId, ownership);
+        V5cAssertJobNotStopped(tx, job.JobId);
         using (var duplicate = _connection.CreateCommand())
         {
             duplicate.Transaction = tx;
