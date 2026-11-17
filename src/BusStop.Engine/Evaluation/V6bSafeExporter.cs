@@ -16,6 +16,9 @@ public sealed record V6bSafeRunSummary(
     string RunId,
     string ModelName,
     string ModelDigest,
+    string V4PromptVersion,
+    string V4SchemaVersion,
+    string ScorerVersion,
     bool AcceptanceAllowed,
     V6LaneScore Overall,
     IReadOnlyList<V6LaneScore> ByCategory,
@@ -43,15 +46,21 @@ public static class V6bSafeExporter
             score.Partition != V6EvaluationContract.Partition ||
             score.CorpusSha256 != audit.CorpusSha256 ||
             score.RunId != audit.RunId ||
-            audit.ContractVersion != V6bLabContract.Version)
+            audit.ContractVersion != V6bLabContract.Version ||
+            audit.V4PromptVersion !=
+                BusStop.Moderation.Verification.EvidenceVerifierV4.VerificationPromptVersion ||
+            audit.V4SchemaVersion !=
+                BusStop.Moderation.Verification.EvidenceVerifierV4.VerificationSchemaVersion ||
+            audit.ScorerVersion != V6EvaluationContract.ScorerVersion)
             throw new InvalidDataException(
                 "V6b safe export refuses incompatible or acceptance-enabled audit.");
 
         return new V6bSafeRunSummary(
             V6bLabContract.Version, score.CorpusVersion,
             score.CorpusSha256, score.LabelStatus, score.Partition,
-            score.RunId, audit.ModelName, audit.ModelDigest, false,
-            score.Overall, score.ByCategory, score.ByRhetoricalMode,
+            score.RunId, audit.ModelName, audit.ModelDigest,
+            audit.V4PromptVersion, audit.V4SchemaVersion, audit.ScorerVersion,
+            false, score.Overall, score.ByCategory, score.ByRhetoricalMode,
             score.ByScenarioGroup, score.ConfusionMatrix,
             "Synthetic provisional DEVELOPMENT metrics only; case-level audits stay private. " +
             "This does not estimate live selection coverage or certify semantic readiness.");
