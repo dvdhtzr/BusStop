@@ -13,7 +13,14 @@ public sealed record V7dProgressTurnReview(
     bool? HealthyDisagreementOrCallback,
     bool? MeaningfulNewMove,
     bool? InventedSharedHistory,
-    string? Notes);
+    string? Notes,
+    // Analyzer outputs, kept PRIVATE and non-authoritative. The owner can
+    // inspect precisely which turns were candidates while reviewing dialogue.
+    bool ExactCopyCandidate = false,
+    long? ExactCopyReferenceSequence = null,
+    bool StrictLexicalOverlapCandidate = false,
+    bool BroadLexicalEchoCandidate = false,
+    bool LoopWindowCandidate = false);
 
 public sealed record V7dProgressReviewWorksheet(
     string ContractVersion,
@@ -78,7 +85,11 @@ public static class V7dProgressCalibration
             null, null, Attestation,
             Array.AsReadOnly(analysis.Signals.Select(s =>
                 new V7dProgressTurnReview(s.Sequence, s.TextSha256,
-                    null, null, null, null, null)).ToArray()));
+                    null, null, null, null, null,
+                    s.ExactPriorUtterance, s.ExactReferenceSequence,
+                    s.LexicalOverlapCandidate,
+                    s.BroadLexicalEchoCandidate,
+                    s.LoopWindowCandidate)).ToArray()));
     }
 
     public static V7dSafeCalibrationReport CalibrateDevelopment(
@@ -115,6 +126,11 @@ public static class V7dProgressCalibration
             var signal = analysis.Signals[index];
             if (label is null || label.Sequence != signal.Sequence ||
                 label.TextSha256 != signal.TextSha256 ||
+                label.ExactCopyCandidate != signal.ExactPriorUtterance ||
+                label.ExactCopyReferenceSequence != signal.ExactReferenceSequence ||
+                label.StrictLexicalOverlapCandidate != signal.LexicalOverlapCandidate ||
+                label.BroadLexicalEchoCandidate != signal.BroadLexicalEchoCandidate ||
+                label.LoopWindowCandidate != signal.LoopWindowCandidate ||
                 label.UnproductiveLoop is null ||
                 label.HealthyDisagreementOrCallback is null ||
                 label.MeaningfulNewMove is null ||
