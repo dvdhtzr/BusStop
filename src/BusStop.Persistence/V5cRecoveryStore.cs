@@ -212,7 +212,7 @@ public sealed partial class ConversationStore
         List<V5cChargedRow> attempts;
         try
         {
-            attempts = V5cReadCharged(jobId);
+            attempts = V5cReadCharged(checkpoint.Job);
         }
         catch (Exception ex) when (ex is InvalidDataException or FormatException
                                or SqliteException or OverflowException)
@@ -347,12 +347,15 @@ public sealed partial class ConversationStore
         return V5cPlan(jobId, kind, reason);
     }
 
-    private List<V5cChargedRow> V5cReadCharged(Guid jobId)
+    private List<V5cChargedRow> V5cReadCharged(VerificationJobIdentity job)
     {
         var attempts = new List<V5cChargedRow>();
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
-            SELECT p.request_id, p.phase, a.status, e.epoch, e.owner_id
+            SELECT p.request_id, p.phase, a.status, e.epoch, e.owner_id,
+                   p.session_id, p.utterance_id, p.policy_version,
+                   a.session_id, a.opportunity_id, a.purpose,
+                   e.session_id, e.gate_id
             FROM v4_verifier_attempt_phases AS p
             JOIN moderator_inference_reservations AS a
               ON a.request_id=p.request_id
@@ -360,18 +363,51 @@ public sealed partial class ConversationStore
               ON e.request_id=p.request_id
             WHERE p.job_id=@job ORDER BY p.reserved_at, p.request_id;
             """;
-        cmd.Parameters.AddWithValue("@job", V5aId(jobId));
+        cmd.Parameters.AddWithValue("@job", V5aId(job.JobId));
         using var rows = cmd.ExecuteReader();
         while (rows.Read())
         {
-            if (!Enum.TryParse<V4AttemptPhase>(
+            if (!Guid.TryParse(rows.GetString(0), out var requestId) ||
+                requestId == Guid.Empty ||
+                !Enum.TryParse<V4AttemptPhase>(
                     rows.GetString(1), false, out var phase) ||
                 !Enum.IsDefined(typeof(V4AttemptPhase), phase))
-                throw new InvalidDataException("Unknown V5c reservation phase.");
+                throw new InvalidDataException("Invalid V5c charged request identity or phase.");
+
+            var expectedPurpose = phase == V4AttemptPhase.ClaimExtraction
+                ? ModerationInferencePurpose.VerifierClaimExtraction.ToString()
+                : ModerationInferencePurpose.VerifierClaimVerification.ToString();
+            if (rows.GetString(5) != job.SessionId.ToString() ||
+                rows.GetString(6) != job.UtteranceId.ToString() ||
+                rows.GetString(7) != EvidenceVerifierV4.ContractVersion ||
+                rows.GetString(8) != job.SessionId.ToString() ||
+                rows.IsDBNull(9) ||
+                rows.GetString(9) != job.OpportunityId.ToString() ||
+                rows.GetString(10) != expectedPurpose)
+                throw new InvalidDataException(
+                    "V5c charged request mismatches the original frozen speech and phase.");
+
+            long? epoch = rows.IsDBNull(3) ? null : rows.GetInt64(3);
+            var owner = rows.IsDBNull(4) ? null : rows.GetString(4);
+            var stampSession = rows.IsDBNull(11) ? null : rows.GetString(11);
+            var gate = rows.IsDBNull(12) ? null : rows.GetString(12);
+            if (epoch.HasValue != (owner is not null) ||
+                epoch.HasValue != (stampSession is not null) ||
+                epoch.HasValue != (gate is not null) ||
+                (epoch.HasValue && (epoch < 1 ||
+                    stampSession != job.SessionId.ToString() ||
+                    !Guid.TryParse(owner, out var ownerId) ||
+                    ownerId == Guid.Empty ||
+                    !Guid.TryParse(gate, out var gateId) ||
+                    gateId == Guid.Empty)))
+                throw new InvalidDataException(
+                    "V5c attempt epoch has malformed or cross-session ownership.");
+
             attempts.Add(new V5cChargedRow(
-                Guid.Parse(rows.GetString(0)), phase, rows.GetString(2),
-                rows.IsDBNull(3) ? null : rows.GetInt64(3),
-                rows.IsDBNull(4) ? null : rows.GetString(4)));
+                requestId, phase, rows.GetString(2), epoch, owner));
+            if (attempts.Count > EvidenceVerifierV4.MaxTotalCalls)
+                throw new InvalidDataException(
+                    "V5c recovered attempt set exceeds V4's hard ceiling.");
         }
         return attempts;
     }
@@ -393,7 +429,7 @@ public sealed partial class ConversationStore
         if (checkpoint.IsTerminal || checkpoint.Job.SessionId != ownership.Session)
             throw new InvalidOperationException(
                 "V5c cannot reconcile a terminal or foreign session.");
-        var selected = V5cReadCharged(jobId).SingleOrDefault(a =>
+        var selected = V5cReadCharged(checkpoint.Job).SingleOrDefault(a =>
             a.RequestId == requestId);
         if (selected is null || selected.Epoch is null ||
             selected.Epoch >= ownership.Epoch || selected.OwnerId is null)
