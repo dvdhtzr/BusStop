@@ -382,6 +382,10 @@ public sealed partial class ConversationStore
                     if (link is null)
                         throw new InvalidDataException(
                             "V5a claim result refers to a foreign or unlinked inference attempt.");
+                    if (result.Status == VerificationOperationalStatus.Completed &&
+                        !V5aChargedRequestCompleted(requestId))
+                        throw new InvalidDataException(
+                            "V5a restored completed verdict has no finalized inference request.");
                 }
                 else if (!V5aCanRecordWithoutModel(result, resultClaim, resultPacket))
                     throw new InvalidDataException(
