@@ -156,7 +156,8 @@ if (argv.Contains("--evaluate-shadow-audit"))
     var auditPath = Arg("--evaluate-shadow-audit");
     if (string.IsNullOrWhiteSpace(auditPath) ||
         argv.Any(x => x is "--model" or "--discuss-document" or "--inspect-document" or
-            "--shadow-moderator" or "--runs" or "--continuing"))
+            "--shadow-moderator" or "--verifier-shadow" or
+            "--runs" or "--continuing"))
     {
         System.Console.Error.WriteLine(
             "Usage: --evaluate-shadow-audit <private shadow.json> [--corpus <labels.json>]");
@@ -186,7 +187,8 @@ if (argv.Contains("--inspect-document"))
 {
     if (string.IsNullOrWhiteSpace(Arg("--inspect-document")) ||
         argv.Any(x => x is "--model" or "--continuing" or "--fresh-bridge" or
-            "--c2-attribution" or "--runs" or "--db" or "--out" or "--discuss-document"))
+            "--c2-attribution" or "--runs" or "--db" or "--out" or
+            "--discuss-document" or "--verifier-shadow"))
     {
         System.Console.Error.WriteLine(
             "Usage: --inspect-document <file.txt|file.md> (no conversation flags).");
