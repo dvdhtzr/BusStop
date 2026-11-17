@@ -364,9 +364,14 @@ public sealed class VerifierV5bOwnershipTests
     public void Ownership_epochs_and_releases_are_sqlite_append_only()
     {
         using var f = Setup();
-        _ = Register(f);
+        var (_, job) = Register(f);
         using var gate = V5bProcessGate.Acquire(f.Path);
         var lease = f.Db.AcquireV5bSession(f.Session.Id, gate);
+        var request = Guid.NewGuid();
+        Assert.True(f.Db.TryReserveV4Attempt(
+            job, request, V4AttemptPhase.ClaimExtraction, lease));
+        f.Db.FinalizeModeratorAttempt(
+            job.SessionId, request, ModerationAttemptStatus.Completed, lease);
         f.Db.ReleaseV5bSession(lease);
 
         using var sql = new SqliteConnection($"Data Source={f.Path}");
@@ -377,6 +382,8 @@ public sealed class VerifierV5bOwnershipTests
             "DELETE FROM verifier_v5b_epochs;",
             "UPDATE verifier_v5b_releases SET owner_id='other';",
             "DELETE FROM verifier_v5b_releases;",
+            "UPDATE verifier_v5b_attempt_epochs SET epoch=999;",
+            "DELETE FROM verifier_v5b_attempt_epochs;",
             "UPDATE verifier_v5b_schema SET version='future-v99';"
         })
         {
