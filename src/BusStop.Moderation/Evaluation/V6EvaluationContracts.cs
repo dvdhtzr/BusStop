@@ -166,9 +166,19 @@ public static class V6CorpusReader
         }
 
         var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        // All data returned as new JSON-deserialized instances; callers can
-        // inspect but cannot silently promote labels via any V6a API.
-        return new V6CorpusFixture(doc, sha);
+        // Deep-freeze all collection backing stores. The JSON deserializer
+        // uses Lists behind IReadOnlyList, which callers could otherwise cast
+        // and mutate after computing the corpus digest.
+        var frozenCases = doc.Cases.Select(c => c with
+        {
+            Evidence = Array.AsReadOnly(c.Evidence.ToArray()),
+            ExpectedSupportingRefs =
+                Array.AsReadOnly(c.ExpectedSupportingRefs.ToArray()),
+            ExpectedOpposingRefs =
+                Array.AsReadOnly(c.ExpectedOpposingRefs.ToArray())
+        }).ToArray();
+        var frozen = doc with { Cases = Array.AsReadOnly(frozenCases) };
+        return new V6CorpusFixture(frozen, sha);
     }
 
     private static void EnsureExactJsonShape(string json)
