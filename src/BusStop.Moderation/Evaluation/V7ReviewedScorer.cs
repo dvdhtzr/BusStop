@@ -217,7 +217,7 @@ public static class V7ReviewedScorer
                     example.RhetoricalMode, example.ShouldExtractClaim,
                     example.ReviewedOutcome, false, false, false, false,
                     false, 0, VerificationOperationalStatus.NotStarted,
-                    null, null, null, false, null, null, 0, 0));
+                    null, null, null, null, false, null, null, 0, 0));
                 continue;
             }
 
