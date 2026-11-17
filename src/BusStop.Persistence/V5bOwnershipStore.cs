@@ -1,4 +1,5 @@
 using BusStop.Domain;
+using BusStop.Moderation;
 using Microsoft.Data.Sqlite;
 
 namespace BusStop.Persistence;
@@ -233,8 +234,8 @@ public sealed partial class ConversationStore
         cmd.Parameters.AddWithValue("@session", session.ToString());
         cmd.Parameters.AddWithValue("@request", requestId.ToString("D"));
         var purpose = cmd.ExecuteScalar() as string;
-        if (purpose is nameof(Moderation.ModerationInferencePurpose.VerifierClaimExtraction)
-            or nameof(Moderation.ModerationInferencePurpose.VerifierClaimVerification))
+        if (purpose is nameof(ModerationInferencePurpose.VerifierClaimExtraction)
+            or nameof(ModerationInferencePurpose.VerifierClaimVerification))
             V5bAssertSessionOwner(tx, session, ownership);
         else if (ownership is not null)
             throw new InvalidOperationException(
