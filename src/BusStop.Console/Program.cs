@@ -1,10 +1,12 @@
 ﻿using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
 using BusStop.Console;
 using BusStop.Coordinator;
 using BusStop.Domain;
 using BusStop.Engine;
 using BusStop.Engine.Verification;
+using BusStop.Engine.Evaluation;
 using BusStop.Moderation.Verification;
 using BusStop.Memory;
 using BusStop.Moderation;
@@ -499,6 +501,16 @@ foreach (var (mode, label, briefing) in plan)
                 $"[{DateTime.Now:HH:mm:ss}] {line}"));
     }
 
+    // V7c passive telemetry: no per-opportunity timing calls, no new model
+    // inference and no change to any participant floor/prompt/commit logic.
+    // The same exact transcript digest is captured immediately before and
+    // after the deferred V6c verifier phase.
+    long? conversationElapsed = null;
+    long? m1DrainElapsed = null;
+    long? verifierDrainElapsed = null;
+    string? beforeVerifierHash = null;
+    string? afterVerifierHash = null;
+    var conversationClock = Stopwatch.StartNew();
     RunResult result;
     try
     {
@@ -511,12 +523,33 @@ foreach (var (mode, label, briefing) in plan)
     }
     finally
     {
+        conversationClock.Stop();
+        conversationElapsed = conversationClock.ElapsedMilliseconds;
         // Wait only AFTER authoritative conversation processing stops.
         // Never wait for a shadow review between two participant turns.
-        shadowWorker?.DrainAsync().GetAwaiter().GetResult();
-        // V6c never competes with live participants OR M1 on Ollama. The
-        // secondary queue drains only after the original M1 process finishes.
-        verifierWorker?.DrainAsync().GetAwaiter().GetResult();
+        var m1Clock = Stopwatch.StartNew();
+        try { shadowWorker?.DrainAsync().GetAwaiter().GetResult(); }
+        finally
+        {
+            m1Clock.Stop();
+            m1DrainElapsed = shadowWorker is not null
+                ? m1Clock.ElapsedMilliseconds : null;
+        }
+        // Participant-first: V6c only drains after all speech and M1.
+        if (verifierWorker is not null)
+        {
+            beforeVerifierHash = V7cNaturalSessionAuditor.HashTranscript(
+                store.GetCommittedUtterances(session));
+            var verifyClock = Stopwatch.StartNew();
+            try { verifierWorker.DrainAsync().GetAwaiter().GetResult(); }
+            finally
+            {
+                verifyClock.Stop();
+                verifierDrainElapsed = verifyClock.ElapsedMilliseconds;
+                afterVerifierHash = V7cNaturalSessionAuditor.HashTranscript(
+                    store.GetCommittedUtterances(session));
+            }
+        }
     }
 
     if (verifierWorker is not null)
@@ -533,6 +566,9 @@ foreach (var (mode, label, briefing) in plan)
                 session = session.ToString(),
                 coverage,
                 workerFaults = verifierWorker.Faults,
+                timing = new V7cSessionTiming(
+                    conversationElapsed, m1DrainElapsed, verifierDrainElapsed,
+                    beforeVerifierHash, afterVerifierHash),
                 pinnedPolicy = verifierPolicy,
                 note = "IN-PROCESS coverage; crash before job registration is UNKNOWN. " +
                        "No finding has participant authority or modifies the transcript."
