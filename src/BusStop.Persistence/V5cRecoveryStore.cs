@@ -301,6 +301,23 @@ public sealed partial class ConversationStore
             requireEnrollment: true);
         if (V5cSessionForJob(jobId, tx) != ownership.Session)
             throw new InvalidOperationException("Cross-session V5c stop denied.");
+        // Inspection and stop registration may race with a legitimate
+        // completed summary under this same in-process OS gate. Never
+        // retroactively mark a terminal V5a report incomplete.
+        using (var terminal = _connection.CreateCommand())
+        {
+            terminal.Transaction = tx;
+            terminal.CommandText = """
+                SELECT COUNT(*) FROM verifier_v5a_summaries WHERE job_id=@job;
+                """;
+            terminal.Parameters.AddWithValue("@job", V5aId(jobId));
+            if ((long)terminal.ExecuteScalar()! != 0)
+            {
+                tx.Commit();
+                return V5cPlan(jobId,
+                    V5cRecoveryDisposition.AlreadyTerminal, "already-final");
+            }
+        }
         bool alreadyStopped = false;
         using (var cmd = _connection.CreateCommand())
         {
