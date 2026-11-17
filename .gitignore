@@ -494,3 +494,7 @@ $RECYCLE.BIN/
 data/*-private-*.json
 data/*-private-*.jsonl
 **/*.private-audit.json
+
+# V6b isolated local Ollama synthetic lab outputs (never commit raw prompts)
+data/v6b-private/
+data/v6b-safe/
