@@ -73,7 +73,8 @@ public sealed partial class ConversationStore
             throw new InvalidDataException("V5a packet count exceeds claims or frozen safety cap.");
 
         var ids = new HashSet<Guid>();
-        var ordered = packets.OrderBy(p => p.Content.ClaimId).ToArray();
+        var ordered = packets.OrderBy(p => p.Content.ClaimId.ToString("D"),
+            StringComparer.Ordinal).ToArray();
         var committed = V5aCommitted(checkpoint.Job);
         foreach (var packet in ordered)
         {
