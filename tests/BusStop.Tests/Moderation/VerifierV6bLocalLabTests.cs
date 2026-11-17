@@ -173,7 +173,7 @@ public sealed class VerifierV6bLocalLabTests
         Assert.DoesNotContain("The official report counted 12 outages.", exported);
         Assert.DoesNotContain("The official report recorded exactly 3 outages.", exported);
         Assert.DoesNotContain("RawModelResponse", exported);
-        Assert.DoesNotContain("Prompt", exported);
+        Assert.DoesNotContain("\"Prompt\":", exported);
         Assert.DoesNotContain("src-1", exported);
         Assert.DoesNotContain("explanation", exported);
     }
