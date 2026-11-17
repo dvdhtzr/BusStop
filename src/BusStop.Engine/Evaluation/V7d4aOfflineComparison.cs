@@ -72,8 +72,8 @@ public static class V7d4aOfflineComparison
         ArgumentNullException.ThrowIfNull(committedTranscript);
         if (committedTranscript.Count is < 1 or > 2000 ||
             transcriptSha256 is not { Length: 64 } ||
-            transcriptSha256.Any(x => x is not (>= '0' and <= '9') and
-                not (>= 'a' and <= 'f')))
+            transcriptSha256.Any(x =>
+                !((x >= '0' && x <= '9') || (x >= 'a' && x <= 'f'))))
             throw new InvalidDataException("Invalid V7d-4a transcript binding.");
 
         for (int i = 0; i < committedTranscript.Count; i++)
@@ -146,9 +146,9 @@ public static class V7d4aOfflineComparison
             privateComparison.LiveBehaviorChanged ||
             privateComparison.ModelInferencePerformed ||
             privateComparison.HumanQualityReviewed ||
-            privateComparison.Turns.Any((turn, index) =>
+            privateComparison.Turns.Where((turn, index) =>
                 turn.ObservedTurnSequence != index + 1 ||
-                turn.Variants.Count != Variants.Length))
+                turn.Variants.Count != Variants.Length).Any())
             throw new InvalidDataException("Invalid private context-comparison trace.");
 
         var summaries = new List<V7d4aSafeVariantSummary>();
