@@ -498,3 +498,6 @@ data/*-private-*.jsonl
 # V6b isolated local Ollama synthetic lab outputs (never commit raw prompts)
 data/v6b-private/
 data/v6b-safe/
+
+# V6c per-session private shadow selection/coverage reports
+**/v6c-private/
