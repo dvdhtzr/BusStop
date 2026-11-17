@@ -192,6 +192,9 @@ public sealed class VerifierV5aLedgerTests
                     job, requestId, V4AttemptPhase.ClaimVerification));
                 db.LinkV5aChargedAttempt(jobId, requestId,
                     V4AttemptPhase.ClaimVerification, new[] { claim.ClaimId });
+                Assert.Throws<InvalidDataException>(() =>
+                    db.RecordV5aClaimResult(
+                        jobId, CleanResult(claim, packet), requestId));
                 db.FinalizeModeratorAttempt(job.SessionId, requestId,
                     ModerationAttemptStatus.Completed);
 
