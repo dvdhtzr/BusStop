@@ -349,6 +349,7 @@ public sealed partial class ConversationStore
                 var result = JsonSerializer.Deserialize<VerificationClaimResult>(json)
                     ?? throw new InvalidDataException("V5a claim result is absent.");
                 if (V5aJson(result) != json ||
+                    !Enum.IsDefined(typeof(VerificationOperationalStatus), result.Status) ||
                     result.ClaimId.ToString("D") != rows.GetString(0) ||
                     result.Status.ToString() != rows.GetString(1) ||
                     (result.Judgment?.PacketId.ToString("D")) !=
@@ -382,10 +383,6 @@ public sealed partial class ConversationStore
                     if (link is null)
                         throw new InvalidDataException(
                             "V5a claim result refers to a foreign or unlinked inference attempt.");
-                    if (result.Status == VerificationOperationalStatus.Completed &&
-                        !V5aChargedRequestCompleted(requestId))
-                        throw new InvalidDataException(
-                            "V5a restored completed verdict has no finalized inference request.");
                 }
                 else if (!V5aCanRecordWithoutModel(result, resultClaim, resultPacket))
                     throw new InvalidDataException(
@@ -393,6 +390,18 @@ public sealed partial class ConversationStore
                 results.Add(result);
                 resultLinks.Add(new V5aClaimResultLink(result.ClaimId, attemptRequestId));
             }
+        }
+
+        // Perform additional SQLite lookups only AFTER the result reader is
+        // closed; do not nest commands beneath an active data reader.
+        foreach (var resultLink in resultLinks)
+        {
+            if (resultLink.VerificationRequestId is not { } requestId) continue;
+            var result = results.Single(r => r.ClaimId == resultLink.ClaimId);
+            if (result.Status == VerificationOperationalStatus.Completed &&
+                !V5aChargedRequestCompleted(requestId))
+                throw new InvalidDataException(
+                    "V5a restored completed verdict has no finalized inference request.");
         }
 
         VerificationObservationSummary? summary = null;
