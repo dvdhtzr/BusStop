@@ -515,3 +515,7 @@ data/v6b-safe/
 **/v7d-safe/
 **/v7d-*.private.json
 **/v7d-*.safe.json
+
+# V7d-4a local, per-turn BusStop context selection traces (never public)
+**/v7d4a-*.private.json
+**/v7d4a-private/
