@@ -134,7 +134,8 @@ public sealed partial class ConversationStore
     /// policy or stage is a hard failure.
     /// </summary>
     public bool TryReserveV4Attempt(
-        VerificationJobIdentity job, Guid requestId, V4AttemptPhase phase)
+        VerificationJobIdentity job, Guid requestId, V4AttemptPhase phase,
+        V5bOwnership? ownership = null)
     {
         if (requestId == Guid.Empty ||
             !Enum.IsDefined(typeof(V4AttemptPhase), phase))
@@ -159,6 +160,9 @@ public sealed partial class ConversationStore
         var moderation = GetModerationPolicy(job.SessionId);
 
         using var tx = _connection.BeginTransaction(deferred: false);
+        // A fenced V5b session cannot dispatch an unowned inference request.
+        // Check in the SAME transaction as the shared-budget reservation.
+        V5bAssertSessionOwner(tx, job.SessionId, ownership);
         using (var duplicate = _connection.CreateCommand())
         {
             duplicate.Transaction = tx;
@@ -233,6 +237,9 @@ public sealed partial class ConversationStore
             insert.Parameters.AddWithValue("@at", now);
             insert.ExecuteNonQuery();
         }
+        // Stamp request and fencing epoch in the SAME transaction as its
+        // shared-budget reservation. A restarted owner cannot recycle it.
+        V5bStampAttempt(tx, job.SessionId, requestId, ownership);
         tx.Commit();
         return true;
     }

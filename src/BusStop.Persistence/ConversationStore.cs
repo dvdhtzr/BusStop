@@ -28,12 +28,15 @@ public sealed partial class ConversationStore : IDisposable
         // An absent V5a ledger is a normal legacy database and is upgraded
         // additively. M1/V2/V4 authoritative tables are never rewritten.
         EnsureV5aLedgerSchemaCompatible();
+        EnsureV5bSchemaCompatible();
         Execute(Schema.Ddl);
         EnsureModerationMarkerColumn(); // add-only migration for older SQLite databases
         EnsureShadowSamplingColumn();
         EnsureShadowAttemptColumn();
         Execute(V5aLedgerSchema.Ddl);
         EnsureV5aLedgerSchemaCompatible();
+        Execute(V5bOwnershipSchema.Ddl);
+        EnsureV5bSchemaCompatible();
     }
 
     // --- writes -------------------------------------------------------------

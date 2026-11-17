@@ -66,7 +66,8 @@ public sealed partial class ConversationStore
     /// a different job for the same utterance/evaluation is rejected.
     /// </summary>
     public void RegisterV5aJob(
-        VerificationJobIdentity job, string evaluationKey)
+        VerificationJobIdentity job, string evaluationKey,
+        V5bOwnership? ownership = null)
     {
         if (job is null ||
             string.IsNullOrWhiteSpace(evaluationKey) ||
@@ -91,6 +92,7 @@ public sealed partial class ConversationStore
         var registration = V5aJson(new V5aRegistrationEnvelope(job, evaluationKey, policyHash));
 
         using var tx = _connection.BeginTransaction(deferred: false);
+        V5bAssertSessionOwner(tx, job.SessionId, ownership);
         using (var cmd = _connection.CreateCommand())
         {
             cmd.Transaction = tx;
