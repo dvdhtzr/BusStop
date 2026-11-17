@@ -79,6 +79,11 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
         if (sampleEvery is < 1 or > 1000 ||
             queueCapacity is < 1 or > V6cShadowContract.MaxQueuedUtterances)
             throw new ArgumentOutOfRangeException(nameof(queueCapacity));
+        if (string.IsNullOrWhiteSpace(model.ModelDigest) ||
+            string.Equals(model.ModelDigest, "unknown",
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(
+                "V6c cannot dispatch a verifier with an unpinned local model digest.");
         if (policy.RuleVersion != V3ClaimDetector.RuleVersion ||
             policy.ExtractionPromptVersion != V3ModelClaimExtractor.PromptVersion ||
             policy.VerificationPromptVersion != EvidenceVerifierV4.VerificationPromptVersion ||
