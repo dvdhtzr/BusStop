@@ -335,6 +335,83 @@ public sealed class VerifierV5bOwnershipTests
     }
 
     [Fact]
+    public void Ownership_epochs_and_releases_are_sqlite_append_only()
+    {
+        using var f = Setup();
+        _ = Register(f);
+        using var gate = V5bProcessGate.Acquire(f.Path);
+        var lease = f.Db.AcquireV5bSession(f.Session.Id, gate);
+        f.Db.ReleaseV5bSession(lease);
+
+        using var sql = new SqliteConnection($"Data Source={f.Path}");
+        sql.Open();
+        foreach (var statement in new[]
+        {
+            "UPDATE verifier_v5b_epochs SET epoch=999;",
+            "DELETE FROM verifier_v5b_epochs;",
+            "UPDATE verifier_v5b_releases SET owner_id='other';",
+            "DELETE FROM verifier_v5b_releases;",
+            "UPDATE verifier_v5b_schema SET version='future-v99';"
+        })
+        {
+            using var cmd = sql.CreateCommand();
+            cmd.CommandText = statement;
+            Assert.Throws<SqliteException>(() => cmd.ExecuteNonQuery());
+        }
+
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.AssertV5bCanDispatch(lease));
+        var newer = f.Db.AcquireV5bSession(f.Session.Id, gate);
+        Assert.Equal(2, newer.Epoch);
+        f.Db.AssertV5bCanDispatch(newer);
+    }
+
+    [Fact]
+    public void Process_gate_disposal_fences_all_future_writes_even_before_takeover()
+    {
+        using var f = Setup();
+        var (utterance, job) = Register(f);
+        var gate = V5bProcessGate.Acquire(f.Path);
+        var lease = f.Db.AcquireV5bSession(f.Session.Id, gate);
+        gate.Dispose();
+
+        var claim = Claim(job, utterance);
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.SealV5aClaims(job.JobId, new[] { claim }, lease));
+        Assert.Throws<InvalidOperationException>(() =>
+            f.Db.TryReserveV4Attempt(
+                job, Guid.NewGuid(), V4AttemptPhase.ClaimVerification, lease));
+        Assert.Empty(f.Db.GetModeratorReservations(job.SessionId));
+    }
+
+    [Fact]
+    public void V5b_schema_rejects_partially_installed_marker_without_changing_v5a()
+    {
+        var path = TempPath();
+        try
+        {
+            using (var sqlite = new SqliteConnection($"Data Source={path}"))
+            {
+                sqlite.Open();
+                using var cmd = sqlite.CreateCommand();
+                cmd.CommandText = """
+                    CREATE TABLE verifier_v5b_schema
+                        (singleton INTEGER PRIMARY KEY, version TEXT NOT NULL);
+                    INSERT INTO verifier_v5b_schema VALUES
+                        (1, 'verifier-ownership-v5b-1');
+                    """;
+                cmd.ExecuteNonQuery();
+            }
+            using var db = ConversationStore.OpenFile(path);
+            Assert.Throws<InvalidDataException>(() => db.InitializeSchema());
+        }
+        finally
+        {
+            try { File.Delete(path); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
     public void Unknown_future_v5b_schema_refuses_additive_migration()
     {
         var path = TempPath();
