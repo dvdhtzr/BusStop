@@ -9,7 +9,7 @@ namespace BusStop.Moderation.Verification;
 public static class EvidenceVerifierV4
 {
     public const string ContractVersion = "evidence-verifier-v4-1";
-    public const string VerificationPromptVersion = "claim-verification-prompt-v4-1";
+    public const string VerificationPromptVersion = "claim-verification-prompt-v4-2";
     public const string VerificationSchemaVersion = "claim-verification-json-v4-1";
     public const int MaxVerificationCalls = 2;
     public const int MaxTotalCalls = 3;
