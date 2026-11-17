@@ -42,6 +42,8 @@ public sealed record V6cShadowCoverage(
         Selected == DurableJobsRegistered && Dropped == 0 && WorkerFailures == 0;
 }
 
+public sealed record V6cShadowWorkerFault(UtteranceId Utterance, string ExceptionType);
+
 public sealed class V6cShadowVerifier : IShadowModerationSink
 {
     private sealed record WorkItem(
@@ -56,6 +58,7 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
     private readonly int _capacity;
     private readonly object _gate = new();
     private readonly Queue<WorkItem> _pending = new();
+    private readonly List<V6cShadowWorkerFault> _faults = new();
     private bool _closed;
     private int _observed;
     private int _notSelected;
@@ -152,6 +155,15 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
         return Task.Run(() => DrainOnWorker(jobs));
     }
 
+    /// <summary>Private, bounded diagnostic codes only; never raw text.</summary>
+    public IReadOnlyList<V6cShadowWorkerFault> Faults
+    {
+        get
+        {
+            lock (_gate) return Array.AsReadOnly(_faults.ToArray());
+        }
+    }
+
     public V6cShadowCoverage Coverage
     {
         get
@@ -233,7 +245,9 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
                     // or coerce an incomplete job into a NoMaterialIssue.
                     // V5c's explicit recovery gate owns any orphaned stages.
                     _failures++;
-                    _ = ex.GetType(); // no raw private text in shared logs
+                    lock (_gate)
+                        _faults.Add(new V6cShadowWorkerFault(
+                            item.Id, ex.GetType().Name));
                 }
             }
         }
