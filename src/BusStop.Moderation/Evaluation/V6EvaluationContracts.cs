@@ -100,6 +100,7 @@ public static class V6CorpusReader
         V6CorpusDocument doc;
         try
         {
+            EnsureExactJsonShape(json);
             doc = JsonSerializer.Deserialize<V6CorpusDocument>(json, JsonOptions)
                 ?? throw new InvalidDataException("V6a corpus body is empty.");
         }
@@ -168,6 +169,46 @@ public static class V6CorpusReader
         // All data returned as new JSON-deserialized instances; callers can
         // inspect but cannot silently promote labels via any V6a API.
         return new V6CorpusFixture(doc, sha);
+    }
+
+    private static void EnsureExactJsonShape(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        RequireFields(root, "corpusVersion", "labelStatus",
+            "partition", "origin", "cases");
+        var cases = root.GetProperty("cases");
+        if (cases.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("V6a cases must be an array.");
+
+        foreach (var item in cases.EnumerateArray())
+        {
+            RequireFields(item, "caseId", "scenarioGroup", "category",
+                "rhetoricalMode", "claimText", "evidence", "expectedOutcome",
+                "expectedSupportingRefs", "expectedOpposingRefs", "rationale");
+            var evidence = item.GetProperty("evidence");
+            if (evidence.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("V6a evidence must be an array.");
+            foreach (var source in evidence.EnumerateArray())
+                RequireFields(source, "referenceId", "kind", "authorityTier",
+                    "visibility", "excerpt", "isSuperseded");
+        }
+    }
+
+    private static void RequireFields(JsonElement element, params string[] names)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("V6a expects a strict JSON object.");
+        var expected = names.ToHashSet(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!expected.Contains(property.Name) || !seen.Add(property.Name))
+                throw new InvalidDataException(
+                    "V6a corpus contains unknown or repeated JSON fields.");
+        }
+        if (seen.Count != expected.Count)
+            throw new InvalidDataException("V6a corpus is missing required JSON fields.");
     }
 
     private static bool Valid(string? value, int max) =>
