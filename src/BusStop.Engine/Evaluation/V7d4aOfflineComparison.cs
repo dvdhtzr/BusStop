@@ -49,6 +49,9 @@ public sealed record V7d4aSafeComparison(
     string TranscriptSha256,
     int ObservedCommittedTurns,
     IReadOnlyList<V7d4aSafeVariantSummary> Variants,
+    int SelectiveContextsIdenticalToRecent8,
+    int SelectiveContextsChangedFromRecent8,
+    long SelectiveAnchorsOutsideRecent8,
     bool LiveBehaviorChanged,
     bool ModelInferencePerformed,
     bool ConversationalImprovementEstablished,
@@ -58,7 +61,7 @@ public sealed record V7d4aSafeComparison(
 
 public static class V7d4aOfflineComparison
 {
-    public const string ContractVersion = "busstop-v7d-4a-compare-v1";
+    public const string ContractVersion = "busstop-v7d-4a-compare-v2";
     private static readonly V7d4aContextVariant[] Variants =
     {
         V7d4aContextVariant.LegacyRecent20,
@@ -163,10 +166,30 @@ public static class V7d4aOfflineComparison
                 selected.LongCount(x => x.SelectedSpeakerCount == 3)));
         }
 
+        var identicalToRecent8 = 0;
+        long distinctAnchorsOutsideRecent8 = 0;
+        foreach (var turn in privateComparison.Turns)
+        {
+            var recent8 = turn.Variants.Single(x =>
+                x.Variant == V7d4aContextVariant.Recent8.ToString());
+            var selective = turn.Variants.Single(x =>
+                x.Variant == V7d4aContextVariant.Selective6Plus2.ToString());
+            if (recent8.SelectedSequences.SequenceEqual(
+                    selective.SelectedSequences))
+                identicalToRecent8++;
+
+            var recent8Sequences = recent8.SelectedSequences.ToHashSet();
+            distinctAnchorsOutsideRecent8 += selective.Anchors.LongCount(
+                x => !recent8Sequences.Contains(x.Sequence));
+        }
+
         return new V7d4aSafeComparison(
             ContractVersion, privateComparison.TranscriptSha256,
             privateComparison.ObservedCommittedTurns,
             Array.AsReadOnly(summaries.ToArray()),
+            identicalToRecent8,
+            privateComparison.ObservedCommittedTurns - identicalToRecent8,
+            distinctAnchorsOutsideRecent8,
             LiveBehaviorChanged: false,
             ModelInferencePerformed: false,
             ConversationalImprovementEstablished: false,
