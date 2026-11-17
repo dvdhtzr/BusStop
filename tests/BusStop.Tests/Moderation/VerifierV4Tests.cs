@@ -189,6 +189,50 @@ public sealed class VerifierV4Tests
         Assert.All(db.GetModeratorReservations(job.SessionId),
             r => Assert.Equal(ModerationAttemptStatus.Completed, r.Status));
         Assert.NotNull(model.LastRequest?.JsonSchema);
+        Assert.Contains("problematicText MUST be a NONEMPTY", model.LastRequest!.Prompt,
+            StringComparison.Ordinal);
+        Assert.Contains("opposingReferences MUST be a NONEMPTY", model.LastRequest.Prompt,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false, true, "problematicText")]
+    [InlineData(true, false, "opposingReferences")]
+    public void Missing_required_contradiction_fields_remain_invalid(
+        bool includeProblematicText, bool includeOpposingCitation, string expectedDetail)
+    {
+        var fixture = Setup();
+        using var db = fixture.Store;
+        var utterance = Speak(fixture, "The report counted 12 outages.");
+        var job = Job(utterance);
+        var prepared = PrepareOne(fixture, utterance, job, ClaimCategory.SourceFact);
+        var package = Assert.Single(prepared.Packets.Packets);
+        var allowed = Assert.Single(package.Packet.Content.Items);
+
+        var proposed = JsonSerializer.Serialize(new
+        {
+            jobId = job.JobId.ToString("D"),
+            judgments = new[]
+            {
+                new
+                {
+                    claimId = package.Claim.ClaimId.ToString("D"),
+                    packetId = package.Packet.PacketId.ToString("D"),
+                    packetSha256 = package.Packet.Sha256,
+                    outcome = "ConfirmedContradiction",
+                    supportingReferences = Array.Empty<string>(),
+                    opposingReferences = includeOpposingCitation
+                        ? new[] { allowed.ReferenceId } : Array.Empty<string>(),
+                    problematicText = includeProblematicText
+                        ? package.Claim.ClaimText : "",
+                    explanation = "The two counts are different."
+                }
+            }
+        });
+
+        var ex = Assert.Throws<InvalidDataException>(() =>
+            V4JudgmentParser.Parse(proposed, job, utterance, prepared.Packets.Packets));
+        Assert.Contains(expectedDetail, ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
