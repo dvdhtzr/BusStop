@@ -10,7 +10,7 @@ We will test whether selective context reduces repeated argument feedback withou
 
 A = LegacyRecent20: original 20 most recent committed prior utterances.
 B = Recent8: eight most recent committed prior utterances.
-C = Selective6Plus2: six latest committed prior utterances, plus up to two exact earlier committed utterances. If the current observed utterance replies to an older committed utterance not in the latest six, reserve the first anchor for that target. Elective anchors come from fourteen turns preceding the latest six: prefer underrepresented speakers, speaker diversity, topical lexical resemblance below near-duplicate levels, then recency. No generated summaries, fabricated canon, other characters' private identities or uncommitted speech. A reply target may be older than the original twenty-turn context, but remains bounded by two anchor slots and is recorded in a private trace.
+C = Selective6Plus2: six latest committed prior utterances, plus up to two exact earlier committed utterances. If the current observed utterance replies to an older committed utterance not in the latest six, reserve the first anchor for that target. Elective anchors come from fourteen turns preceding the latest six: prefer underrepresented speakers, speaker diversity, topical lexical resemblance below near-duplicate levels, then recency. **An elective anchor is ineligible if its normalized wording is an exact duplicate of any other committed utterance in the same history.** This prevents C from selecting both sides of a copied exchange; required, exact reply references remain an exception. No generated summaries, fabricated canon, other characters' private identities or uncommitted speech. A reply target may be older than the original twenty-turn context, but remains bounded by two anchor slots and is recorded in a private trace.
 
 These selectors are isolated in the Context project and NOT wired to live ConversationEngine, FloorCoordinator, participant prompts, model clients or moderators. A synthetic parity test uses the existing, unchanged ParticipantContextBuilder to confirm that A renders the same prompt as the original 20-turn builder, when all other context settings match. Historical prompts cannot always be reconstructed byte-for-byte from committed SQLite alone: the source settings may include the optional C2 guidance and remembered context.
 
@@ -20,9 +20,19 @@ These selectors are isolated in the Context project and NOT wired to live Conver
 - The offline selector rejects disordered or cross-session history and any unknown/future reply reference.
 - A selection digest binds sequence, original utterance ID and SHA-256 of exact speech. The private trace digest binds the source fingerprint, turn speaker and reply reference, selected sequences and hashes, anchor reasons, and selection counts. These are reproducibility checks, not independent authentication.
 - Private per-turn trace: speaker identifiers, selected sequence indices, reply target, anchor reasons and selected hashes; never place in a public/safe report. The private trace contains NO original dialogue text.
-- Safe aggregate stdout only: compared committed-turn contexts, selected utterance counts and character counts, anchor totals, known reply omissions, three-speaker coverage. It contains NO speech, speaker identifiers or per-turn indices.
+- Safe aggregate stdout only: compared committed-turn contexts, selected utterance counts and character counts, anchor totals, known reply omissions, three-speaker coverage, **number of C contexts identical to B, number changed, and number of C anchors outside B's eight-turn window**. It contains NO speech, speaker identifiers or per-turn indices. Gross anchor counts are not evidence that C added useful or distinct content.
 - Limit: the comparison evaluates contexts before COMMITTED turns only; it does not reconstruct each offered, passed or failed opportunity. This is explicitly not complete floor-opportunity parity. Source context may also include additional historical recollection settings; A parity is established in synthetic tests for equal builder inputs.
 - Character counts are not estimated full prompt tokens, model latency or dialogue quality. No Ollama calls, new conversation runs, human semantic acceptance, holdout opening, or behavioral authorization.
+
+## Owner-reported initial comparison and narrow correction
+
+First owner-local read-only comparison on the 35-turn V7c development transcript: A selected 490 total utterances, B 244, C 244; C created 55 elective anchor selections and all three variants had 30 contexts containing all three speakers. That does not establish improved dialogue.
+
+Private anchor inspection uncovered a concrete flaw: before turn 35, C selected both turns 20 and 21 as its two anchors even though turn 21 was a verbatim copy of turn 20. Other windows showed C identical to B when both earlier anchors were already inside B's eight recent turns. The first version overstated useful distinct history by reporting gross anchors alone.
+
+This PR now excludes **exact repeated full utterances** from elective anchoring and reports how many C contexts actually differ from B. This rule is intentionally narrow, deterministic, and not a semantic quality claim. It does not detect paraphrased repetition, invented histories, or judge relevance. The original baseline is already known development material; this correction must not be interpreted as a held-out win.
+
+**Updated local owner GREEN is required after this change.** Re-run the original read-only A/B/C tool and regenerate any private report with a NEW filename; never overwrite the old private trace. Compare which earlier statements C now selects, particularly around turns 21–35.
 
 ## V7d-4a technical gate
 
