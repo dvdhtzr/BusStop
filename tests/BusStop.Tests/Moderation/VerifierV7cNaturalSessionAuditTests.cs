@@ -260,13 +260,14 @@ public sealed class VerifierV7cNaturalSessionAuditTests
     }
 
     [Fact]
-    public void Corrupt_v5a_event_is_rejected_instead_of_counted_clean()
+    public void Immutable_v5a_stage_trigger_blocks_direct_event_tampering()
     {
         using var f = new Fixture();
         var (cov, _) = f.BuildRun();
         var jobs = f.Store.ListV7cVerificationJobs(
             f.Session, V6cShadowContract.EvaluationKey);
         Assert.NotEmpty(jobs);
+
         using (var sql = new SqliteConnection(
             "Data Source=" + f.DatabasePath))
         {
@@ -279,8 +280,52 @@ public sealed class VerifierV7cNaturalSessionAuditTests
                 """;
             cmd.Parameters.AddWithValue("@tampered", new string('f', 64));
             cmd.Parameters.AddWithValue("@job", jobs[0].ToString("D"));
+
+            var ex = Assert.Throws<SqliteException>(() =>
+                cmd.ExecuteNonQuery());
+            Assert.Equal(19, ex.SqliteErrorCode);
+            Assert.Contains("Immutable V5a stage event", ex.Message);
+        }
+
+        // A rejected update leaves the original event and checkpoint valid.
+        var audit = f.Audit(cov);
+        Assert.True(audit.LedgerMatchesCoverage);
+        Assert.Equal(jobs.Count, audit.ValidatedLedgerJobs);
+    }
+
+    [Fact]
+    public void Offline_tampered_v5a_event_is_rejected_by_hash_chain_validator()
+    {
+        using var f = new Fixture();
+        var (cov, _) = f.BuildRun();
+        var jobs = f.Store.ListV7cVerificationJobs(
+            f.Session, V6cShadowContract.EvaluationKey);
+        Assert.NotEmpty(jobs);
+
+        // Deliberate FAULT INJECTION in an automatically deleted test SQLite
+        // database ONLY. Simulate a damaged/hostile offline DB where the
+        // immutable trigger has already been removed. Never change production
+        // schema, migrations, or immutable trigger definitions.
+        using (var sql = new SqliteConnection(
+            "Data Source=" + f.DatabasePath))
+        {
+            sql.Open();
+            using var cmd = sql.CreateCommand();
+            cmd.CommandText = "DROP TRIGGER v5a_events_no_update;";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = """
+                UPDATE verifier_v5a_events
+                SET payload_sha256 = @tampered
+                WHERE job_id = @job AND sequence = 1;
+                """;
+            cmd.Parameters.AddWithValue("@tampered", new string('f', 64));
+            cmd.Parameters.AddWithValue("@job", jobs[0].ToString("D"));
             Assert.Equal(1, cmd.ExecuteNonQuery());
         }
+
+        // Even a successfully corrupted offline DB must fail closed during
+        // V7c audit, independently of the normal SQLite update trigger.
         Assert.Throws<InvalidDataException>(() => f.Audit(cov));
     }
 
