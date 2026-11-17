@@ -107,7 +107,7 @@ public sealed class VerifierV7cNaturalSessionAuditTests
             {
                 Commit("The official report counted 12 bus delays.", 0),
                 Commit("I lived in Elmvale all my life.", 1),
-                Commit("Did you see the report, Arthur?", 2)
+                Commit("Did you see the report about 3 delays, Arthur?", 2)
             };
             var original = Store.GetCommittedUtterances(Session);
             var before = V7cNaturalSessionAuditor.HashTranscript(original);
