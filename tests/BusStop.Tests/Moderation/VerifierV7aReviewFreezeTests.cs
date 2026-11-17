@@ -553,6 +553,47 @@ public sealed class VerifierV7aReviewFreezeTests
     }
 
     [Fact]
+    public void Namespaced_real_host_reference_ids_are_allowed_in_human_reviews()
+    {
+        var development = Corpus(V7Partition.Development);
+        var cases = development.Cases.ToArray();
+        cases[0] = cases[0] with
+        {
+            Evidence = Array.AsReadOnly(new[]
+            {
+                cases[0].Evidence[0] with
+                {
+                    ReferenceId = "briefing:0b1976a3-8888-4444-9999-113311331133"
+                }
+            }),
+            OpposingReferences = new[]
+            {
+                "briefing:0b1976a3-8888-4444-9999-113311331133"
+            }
+        };
+        var x = Inputs(development: development with
+        {
+            Cases = Array.AsReadOnly(cases)
+        });
+        var prepared = V7ReviewFreezeValidator.Prepare(
+            x.Development, x.Holdout, x.Plan);
+        Assert.Equal(8, prepared.DevelopmentCases);
+    }
+
+    [Fact]
+    public void Human_review_outcomes_must_be_readable_named_enums_not_integers()
+    {
+        var x = Inputs();
+        var numeric = x.Development.Replace(
+            "\"reviewedOutcome\":\"ConfirmedContradiction\"",
+            "\"reviewedOutcome\":0", StringComparison.Ordinal);
+        Assert.NotEqual(x.Development, numeric);
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Prepare(
+                numeric, x.Holdout, x.Plan));
+    }
+
+    [Fact]
     public void Strict_json_contract_rejects_duplicate_labels_missing_fields_and_unknown_keys()
     {
         var x = Inputs();
