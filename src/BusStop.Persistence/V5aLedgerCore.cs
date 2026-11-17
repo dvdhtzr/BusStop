@@ -512,6 +512,22 @@ public sealed partial class ConversationStore
              summaryEvent.PayloadJson != V5aJson(summary)))
             throw new InvalidDataException("V5a terminal summary event was altered.");
 
+        foreach (var link in links)
+        {
+            if (link.RequestId == Guid.Empty ||
+                link.ClaimIds.Count > EvidenceVerifierV4.MaxClaimsPerBatch ||
+                link.ClaimIds.Count != link.ClaimIds.Distinct().Count() ||
+                link.ClaimIds.Any(id => id == Guid.Empty) ||
+                (link.Phase == V4AttemptPhase.ClaimExtraction &&
+                 link.ClaimIds.Count != 0) ||
+                (link.Phase == V4AttemptPhase.ClaimVerification &&
+                 (link.ClaimIds.Count == 0 ||
+                  link.ClaimIds.Any(id => !packets.Any(p =>
+                      p.Content.ClaimId == id)))))
+                throw new InvalidDataException(
+                    "V5a charged request group is inconsistent with sealed claim packets.");
+        }
+
         var attemptsById = links.ToDictionary(x => x.RequestId);
         var resultsById = results.ToDictionary(x => x.ClaimId);
         var linksSeen = 0;
