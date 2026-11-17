@@ -223,12 +223,16 @@ public sealed partial class ConversationStore
     }
 
     public void FinalizeModeratorAttempt(
-        SessionId session, Guid requestId, ModerationAttemptStatus status)
+        SessionId session, Guid requestId, ModerationAttemptStatus status,
+        V5bOwnership? ownership = null)
     {
         if (status is not (ModerationAttemptStatus.Completed or ModerationAttemptStatus.Interrupted))
             throw new InvalidOperationException("Only completed or interrupted is a final attempt status.");
 
         using var tx = _connection.BeginTransaction(deferred: false);
+        // Only verifier purposes are fenced; historical M1 attempts remain
+        // independent. Even idempotent finalization requires a current epoch.
+        V5bAssertV4FinalizationOwner(tx, session, requestId, ownership);
         using var cmd = _connection.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
