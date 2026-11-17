@@ -127,6 +127,13 @@ public sealed partial class ConversationStore
     {
         if (requestId == Guid.Empty || !Enum.IsDefined(typeof(ModerationInferencePurpose), purpose))
             throw new InvalidOperationException("Invalid moderator inference request.");
+        // V4 verifier requests MUST use TryReserveV4Attempt, which atomically
+        // enforces the shared session budget, phase sidecar and V5b epoch.
+        // The historical M1 reservation API must never bypass those gates.
+        if (purpose is ModerationInferencePurpose.VerifierClaimExtraction or
+            ModerationInferencePurpose.VerifierClaimVerification)
+            throw new InvalidOperationException(
+                "Verifier inference must use the phase-aware, fenced V4 reservation API.");
         var policy = GetModerationPolicy(session);
         if (policy.Mode == ModerationOperatingMode.Disabled)
             throw new InvalidOperationException("Moderator inference is disabled.");
