@@ -151,6 +151,9 @@ public sealed class VerifierV7aReviewFreezeTests
             "test-digest-000001", "verification-prompt-test",
             "verification-schema-test", "reviewed-scorer-test",
             2, 1, 1,
+            // Unit-test example values only: no owner has frozen a plan.
+            0.90m, 0.90m, 0.90m, 0.80m, 0.80m,
+            0.10m, 0.10m, 0.10m, 10000, 0.20m,
             Array.AsReadOnly(new[]
             {
                 Rule("category:SourceFact", true),
@@ -360,6 +363,60 @@ public sealed class VerifierV7aReviewFreezeTests
         Assert.Throws<InvalidDataException>(() =>
             V7ReviewFreezeValidator.Validate(
                 x.Development, x.Holdout, x.Plan, x.Approval));
+    }
+
+    [Fact]
+    public void Missing_technical_or_human_quality_metric_block_freeze()
+    {
+        var plan = Criteria();
+        var x = Inputs(criteria: plan with
+        {
+            MinimumClaimSpanRecall = -0.01m
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Validate(
+                x.Development, x.Holdout, x.Plan, x.Approval));
+
+        x = Inputs(criteria: plan with
+        {
+            MaximumVerifierP95LatencyMilliseconds = 0
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Validate(
+                x.Development, x.Holdout, x.Plan, x.Approval));
+
+        x = Inputs(criteria: plan with
+        {
+            MaximumParticipantLatencyRegressionFraction = 1.01m
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Validate(
+                x.Development, x.Holdout, x.Plan, x.Approval));
+
+        x = Inputs(criteria: plan with
+        {
+            HumanQualityReviewProcedure = ""
+        });
+        Assert.Throws<InvalidDataException>(() =>
+            V7ReviewFreezeValidator.Validate(
+                x.Development, x.Holdout, x.Plan, x.Approval));
+    }
+
+    [Fact]
+    public void Prepare_produces_only_unsigned_nonacceptance_hash_commitments()
+    {
+        var x = Inputs();
+        var preparation = V7ReviewFreezeValidator.Prepare(
+            x.Development, x.Holdout, x.Plan);
+        Assert.False(preparation.HumanApprovalReceived);
+        Assert.False(preparation.SemanticAcceptanceGranted);
+        Assert.False(preparation.EnforcementAuthorized);
+        Assert.Equal(Sha(x.Holdout), preparation.HoldoutSha256);
+        Assert.Equal(Sha(x.Plan), preparation.CriteriaSha256);
+        var serialized = Serialize(preparation);
+        Assert.DoesNotContain("ReviewerId", serialized);
+        Assert.DoesNotContain("caseId", serialized);
+        Assert.DoesNotContain("pine report", serialized);
     }
 
     [Fact]
