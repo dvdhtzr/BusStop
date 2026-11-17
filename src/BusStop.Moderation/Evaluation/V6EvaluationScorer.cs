@@ -20,6 +20,7 @@ public sealed record V6CaseScore(
     bool? ReferencesAuthorized,
     bool? ReferencesMatchProvisionalRubric,
     bool? ContradictionSpanValid,
+    bool? VerdictShapeValid,
     int ChargedModelCalls);
 
 public sealed record V6ConfusionCell(
@@ -37,6 +38,11 @@ public sealed record V6LaneScore(
     int Skipped,
     int Completed,
     int OperationalFailures,
+    int InvalidResponses,
+    int TransportFailures,
+    int IncompatibleCheckpoints,
+    int BudgetSkipped,
+    int OtherErrors,
     int ExactOutcomeMatches,
     int ConfirmedTruePositives,
     int ConfirmedFalsePositives,
@@ -47,6 +53,7 @@ public sealed record V6LaneScore(
     int ReferencesRelevantCount,
     int CitationCasesScored,
     int InvalidContradictionSpans,
+    int InvalidVerdictShapes,
     int ChargedModelCalls)
 {
     public double? SelectionCoverage => Ratio(Selected, TotalCases);
@@ -162,13 +169,14 @@ public static class V6EvaluationScorer
                     item.RhetoricalMode, item.ExpectedOutcome,
                     V6SelectionDisposition.NotSelected, false,
                     VerificationOperationalStatus.NotStarted, null,
-                    null, null, null, null, 0));
+                    null, null, null, null, null, 0));
                 continue;
             }
 
             bool? authorized = null;
             bool? rubricMatch = null;
             bool? spanValid = null;
+            bool? shapeValid = null;
             if (obs.OperationalStatus == VerificationOperationalStatus.Completed)
             {
                 var allowed = item.Evidence.Select(e => e.ReferenceId)
@@ -180,6 +188,7 @@ public static class V6EvaluationScorer
                     spanValid = !string.IsNullOrWhiteSpace(obs.ProblematicText) &&
                         item.ClaimText.Contains(obs.ProblematicText,
                             StringComparison.Ordinal);
+                shapeValid = HasValidVerdictShape(obs, spanValid);
             }
 
             scores.Add(new V6CaseScore(
@@ -187,7 +196,8 @@ public static class V6EvaluationScorer
                 item.RhetoricalMode, item.ExpectedOutcome, obs.Selection,
                 true, obs.OperationalStatus, obs.Outcome,
                 obs.Outcome is null ? null : obs.Outcome == item.ExpectedOutcome,
-                authorized, rubricMatch, spanValid, obs.ChargedModelCalls));
+                authorized, rubricMatch, spanValid, shapeValid,
+                obs.ChargedModelCalls));
         }
 
         var all = scores.ToArray();
@@ -269,6 +279,34 @@ public static class V6EvaluationScorer
             "Same-case flip analysis; repeated passes are NOT independent holdout examples.");
     }
 
+    private static bool HasValidVerdictShape(
+        V6CaseObservation observation, bool? spanValid)
+    {
+        if (observation.SupportingReferences.Count !=
+                observation.SupportingReferences.Distinct(StringComparer.Ordinal).Count() ||
+            observation.OpposingReferences.Count !=
+                observation.OpposingReferences.Distinct(StringComparer.Ordinal).Count())
+            return false;
+
+        return observation.Outcome switch
+        {
+            ClaimVerificationOutcome.ConfirmedContradiction =>
+                observation.OpposingReferences.Count > 0 && spanValid == true,
+            ClaimVerificationOutcome.ConflictingEvidence =>
+                observation.SupportingReferences.Count > 0 &&
+                observation.OpposingReferences.Count > 0 &&
+                string.IsNullOrEmpty(observation.ProblematicText),
+            ClaimVerificationOutcome.NoMaterialIssue =>
+                observation.OpposingReferences.Count == 0 &&
+                string.IsNullOrEmpty(observation.ProblematicText),
+            ClaimVerificationOutcome.InsufficientEvidence =>
+                observation.SupportingReferences.Count == 0 &&
+                observation.OpposingReferences.Count == 0 &&
+                string.IsNullOrEmpty(observation.ProblematicText),
+            _ => false
+        };
+    }
+
     private static bool IsReferenceFit(V6LabeledCase expected, V6CaseObservation observed)
     {
         if (observed.Outcome != expected.ExpectedOutcome)
@@ -320,6 +358,11 @@ public static class V6EvaluationScorer
             rows.Count(r => r.ExplicitlyObserved &&
                 r.Selection == V6SelectionDisposition.Selected &&
                 r.OperationalStatus != VerificationOperationalStatus.Completed),
+            rows.Count(r => r.OperationalStatus == VerificationOperationalStatus.InvalidResponse),
+            rows.Count(r => r.OperationalStatus == VerificationOperationalStatus.TransportFailure),
+            rows.Count(r => r.OperationalStatus == VerificationOperationalStatus.IncompatibleCheckpoint),
+            rows.Count(r => r.OperationalStatus == VerificationOperationalStatus.SkippedForBudget),
+            rows.Count(r => r.OperationalStatus == VerificationOperationalStatus.Error),
             completed.Count(r => r.OutcomeMatchesProvisionalLabel == true),
             truePositives,
             falsePositives,
@@ -334,6 +377,7 @@ public static class V6EvaluationScorer
             completed.Count(c => c.ReferencesMatchProvisionalRubric == true),
             completed.Length,
             completed.Count(c => c.ContradictionSpanValid == false),
+            completed.Count(c => c.VerdictShapeValid == false),
             rows.Sum(c => c.ChargedModelCalls));
     }
 }
