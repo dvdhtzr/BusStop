@@ -296,6 +296,20 @@ public sealed class V6cShadowVerifier : IShadowModerationSink
             candidates.Add(pack);
         }
 
+        // Preflight the EXACT V4 prompt before charging a shared inference
+        // budget slot. Unsupported oversized packets are explicit errors,
+        // never silent successes or charged calls that were not dispatched.
+        if (candidates.Count > 0 &&
+            Encoding.UTF8.GetByteCount(
+                V4GroundedVerifier.BuildPrompt(job, candidates)) > 28_000)
+        {
+            foreach (var pack in candidates)
+                findings.Add(pack.Claim.ClaimId, new VerificationClaimResult(
+                    pack.Claim.ClaimId, VerificationOperationalStatus.Error,
+                    null, "V4 prompt exceeds the pinned UTF-8 byte ceiling."));
+            candidates.Clear();
+        }
+
         var chargedIds = new List<Guid>();
         Guid? charged = null;
         if (candidates.Count > 0)
