@@ -63,14 +63,18 @@ public sealed class VerifierV5bOwnershipTests
             SessionMode.FreshEncounter, briefing.Id,
             "floor-2", "test-model", "test-context",
             SessionStatus.Active, DateTimeOffset.UtcNow, null);
-        var m1 = withM1 ? ModerationSessionPolicy.Disabled with
+        ModerationSessionPolicy? m1 = null;
+        if (withM1)
         {
-            Mode = ModerationOperatingMode.Shadow,
-            RuleVersion = "m1-rules-test", PromptVersion = "m1-prompt-test",
-            ModelName = "m1-test", ModelDigest = "m1-test-digest",
-            Temperature = 0.1, Think = false,
-            MaxModeratorCalls = 8, ShadowSampleEvery = 1
-        } : null;
+            m1 = ModerationSessionPolicy.Disabled with
+            {
+                Mode = ModerationOperatingMode.Shadow,
+                RuleVersion = "m1-rules-test", PromptVersion = "m1-prompt-test",
+                ModelName = "m1-test", ModelDigest = "m1-test-digest",
+                Temperature = 0.1, Think = false,
+                MaxModeratorCalls = 8, ShadowSampleEvery = 1
+            };
+        }
         db.CreateSession(session, m1);
         db.PinV4VerifierPolicy(session.Id, Policy());
         return new Fixture(path, db, session, first, second);
